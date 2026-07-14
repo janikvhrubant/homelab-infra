@@ -7,7 +7,7 @@ app-template:
             repository: docker.io/vaultwarden/server
             tag: 1.32.7-alpine
           env:
-            DOMAIN: https://vaultwarden.lab.tanku.eu
+            DOMAIN: https://vault.lab.tanku.eu
             SIGNUPS_ALLOWED: "false"
 
   service:
@@ -24,7 +24,7 @@ app-template:
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
-        - host: &host vaultwarden.lab.tanku.eu
+        - host: &host vault.lab.tanku.eu
           paths:
             - path: /
               pathType: Prefix
