@@ -1,0 +1,44 @@
+name: Talos Apply Config
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'metal/talos/**'
+
+jobs:
+  apply:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install talosctl
+        run: |
+          curl -sL https://talos.dev/install | sh
+
+      - name: Install talhelper
+        run: |
+          curl -fsSL https://github.com/budimanjojo/talhelper/releases/latest/download/talhelper_linux_amd64.tar.gz | tar -xz
+          sudo mv talhelper /usr/local/bin/
+
+      - name: Install sops
+        run: |
+          curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.10.2.linux.amd64 -o sops
+          chmod +x sops
+          sudo mv sops /usr/local/bin/
+
+      - name: Generate Talos configs
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+          cd metal/talos
+          talhelper genconfig
+
+      - name: Apply Talos config
+        run: |
+          talosctl apply-config \
+            --nodes 192.168.178.90 \
+            --talosconfig metal/talos/clusterconfig/talosconfig \
+            --file metal/talos/clusterconfig/homelab-metal0.yaml
