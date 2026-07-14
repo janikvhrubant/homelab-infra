@@ -107,3 +107,26 @@ jobs:
           kubectl patch storageclass local-path \
             -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
             2>/dev/null || true
+
+      - name: Install External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update
+          kubectl create namespace external-secrets 2>/dev/null || true
+          helm dependency update platform/external-secrets
+          helm upgrade --install external-secrets platform/external-secrets \
+            --namespace external-secrets \
+            --values platform/external-secrets/values.yaml \
+            --wait
+
+      - name: Deploy External Secrets credentials
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+          sops --decrypt platform/external-secrets/vaultwarden-credentials.sops.yaml | kubectl apply -f -
+
+      - name: Apply ClusterSecretStore
+        run: |
+          kubectl apply -f platform/external-secrets/cluster-secret-store.yaml

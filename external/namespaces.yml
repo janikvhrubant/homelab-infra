@@ -1,5 +1,3 @@
-
-kubectl get all -n metallb-system
 - hosts: localhost
   tasks:
     - name: Ensure required namespaces exist
