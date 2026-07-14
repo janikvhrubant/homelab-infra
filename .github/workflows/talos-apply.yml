@@ -23,7 +23,7 @@ jobs:
 
       - name: Install sops
         run: |
-          curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.10.2.linux.amd64 -o sops
+          curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.13.2.linux.amd64 -o sops
           chmod +x sops
           sudo mv sops /usr/local/bin/
 
