@@ -24,3 +24,4 @@ nodes:
           - network: 0.0.0.0/0
             gateway: 192.168.178.1
     controlPlane: true
+
