@@ -148,3 +148,9 @@ jobs:
           kubectl get certificate -n kanidm 2>/dev/null || true
           kubectl describe certificate kanidm-tls -n kanidm 2>/dev/null || true
           kubectl get challenges -n kanidm 2>/dev/null || true
+          echo "=== Cleaning up stuck challenges ==="
+          for challenge in $(kubectl get challenges -n kanidm -o name 2>/dev/null); do
+            kubectl patch $challenge -n kanidm --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+          done
+          kubectl delete order -n kanidm --all 2>/dev/null || true
+          kubectl delete certificaterequest -n kanidm --all 2>/dev/null || true
