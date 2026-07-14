@@ -1,7 +1,7 @@
 clusterName: homelab
 talosVersion: v1.13.6
 kubernetesVersion: v1.33.2
-endpoint: https://192.168.1.110:6443
+endpoint: https://192.168.178.90:6443
 domain: lab.tanku.eu
 
 allowSchedulingOnControlPlanes: true
@@ -11,7 +11,7 @@ cniConfig:
 
 nodes:
   - hostname: metal0
-    ipAddress: 192.168.1.110
+    ipAddress: 192.168.178.90
     installDisk: /dev/nvme0n1
     machineSpec:
       mode: metal
@@ -19,8 +19,8 @@ nodes:
       - interface: eno1
         dhcp: false
         addresses:
-          - 192.168.1.110/24
+          - 192.168.178.90/24
         routes:
           - network: 0.0.0.0/0
-            gateway: 192.168.1.1
+            gateway: 192.168.178.1
     controlPlane: true
