@@ -1,8 +1,8 @@
 set timeout=1
 
-menuentry '{{ iso_url | basename | splitext | first }} (PXE)' {
+menuentry 'Talos Linux (PXE)' {
     linux vmlinuz \
         ip=dhcp \
-        inst.ks=http://{{ ansible_default_ipv4.address }}/init-config/${net_default_mac}.ks
+        talos.platform=metal
     initrd initrd.img
 }
