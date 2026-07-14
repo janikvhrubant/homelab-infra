@@ -1,0 +1,31 @@
+deployment:
+  replicas: 1
+
+service:
+  type: LoadBalancer
+
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    port: 8443
+    exposedPort: 443
+
+ingressRoute:
+  dashboard:
+    enabled: false
+
+providers:
+  kubernetesCRD:
+    enabled: true
+  kubernetesIngress:
+    enabled: true
+
+log:
+  level: INFO
