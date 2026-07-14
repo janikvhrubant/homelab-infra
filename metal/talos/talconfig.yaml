@@ -29,5 +29,6 @@ nodes:
         machine:
           disks:
             - device: /dev/sdb
+              wipe: true
               partitions:
                 - mountpoint: /var/mnt/media
