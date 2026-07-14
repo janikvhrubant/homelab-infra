@@ -3,6 +3,9 @@ deployment:
 
 service:
   type: LoadBalancer
+  spec:
+    externalIPs:
+      - 192.168.178.90
 
 ports:
   web:

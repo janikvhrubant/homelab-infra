@@ -11,9 +11,16 @@ spec:
     solvers:
       - dns01:
           webhook:
-            groupName: acme.lab.tanku.eu
+            groupName: cert-manager-webhook-inwx.bitte-ein-bit.github.com
             solverName: inwx
             config:
-              apiUrl: https://api.inwx.de/json
-              secretName: inwx-credentials
               ttl: 300
+              usernameSecretKeyRef:
+                name: inwx-credentials
+                key: username
+              passwordSecretKeyRef:
+                name: inwx-credentials
+                key: password
+        selector:
+          dnsZones:
+            - tanku.eu
