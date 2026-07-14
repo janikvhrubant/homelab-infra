@@ -1,3 +1,5 @@
 creation_rules:
   - path_regex: metal/talos/.*\.sops\.yaml
     age: age1cj453dwyx8q62qwe54svrdxpa07807jv7fkpftkd5ds0qmng5azqwnn2dj
+  - path_regex: platform/.*\.sops\.yaml
+    age: age1cj453dwyx8q62qwe54svrdxpa07807jv7fkpftkd5ds0qmng5azqwnn2dj
