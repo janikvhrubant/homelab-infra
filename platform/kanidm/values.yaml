@@ -45,6 +45,8 @@ app-template:
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
         traefik.ingress.kubernetes.io/router.tls: "true"
+        traefik.ingress.kubernetes.io/service.serversscheme: https
+        traefik.ingress.kubernetes.io/service.serverstransport: insecure@internal
       hosts:
         - host: &host auth.lab.tanku.eu
           paths:
