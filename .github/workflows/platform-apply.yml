@@ -1,0 +1,109 @@
+name: Platform Apply
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-apply.yml'
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          # kubectl
+          if ! command -v kubectl &>/dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          fi
+          # helm
+          if ! command -v helm &>/dev/null; then
+            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          fi
+          # sops
+          if ! command -v sops &>/dev/null; then
+            curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.13.2.linux.amd64 -o sops
+            chmod +x sops && sudo mv sops /usr/local/bin/
+          fi
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          cat /var/run/secrets/kubernetes.io/serviceaccount/token > /tmp/sa-token
+          kubectl config set-cluster homelab \
+            --server=https://kubernetes.default.svc \
+            --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          kubectl config set-credentials runner \
+            --token=$(cat /tmp/sa-token)
+          kubectl config set-context homelab --cluster=homelab --user=runner
+          kubectl config use-context homelab
+
+      - name: Add Helm repos
+        run: |
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add metallb https://metallb.github.io/metallb
+          helm repo add traefik https://helm.traefik.io/traefik
+          helm repo add cert-manager-webhook-inwx https://bitte-ein-bit.github.io/cert-manager-webhook-inwx
+          helm repo update
+
+      - name: Install cert-manager
+        run: |
+          helm upgrade --install cert-manager jetstack/cert-manager \
+            --namespace cert-manager \
+            --create-namespace \
+            --set crds.enabled=true \
+            --set 'extraArgs[0]=--dns01-recursive-nameservers=8.8.8.8:53' \
+            --set 'extraArgs[1]=--dns01-recursive-nameservers-only=true' \
+            --wait
+
+      - name: Install MetalLB
+        run: |
+          kubectl label namespace metallb-system pod-security.kubernetes.io/enforce=privileged --overwrite 2>/dev/null || true
+          helm upgrade --install metallb metallb/metallb \
+            --namespace metallb-system \
+            --create-namespace \
+            --wait
+          kubectl label namespace metallb-system pod-security.kubernetes.io/enforce=privileged --overwrite
+          kubectl rollout restart daemonset -n metallb-system 2>/dev/null || true
+          kubectl apply -f platform/metallb/config.yaml
+
+      - name: Install Traefik
+        run: |
+          kubectl create namespace traefik 2>/dev/null || true
+          kubectl label namespace traefik pod-security.kubernetes.io/enforce=privileged --overwrite
+          helm upgrade --install traefik traefik/traefik \
+            --namespace traefik \
+            --values platform/traefik/values.yaml \
+            --wait
+
+      - name: Install cert-manager-webhook-inwx
+        run: |
+          helm upgrade --install cert-manager-webhook-inwx cert-manager-webhook-inwx/cert-manager-webhook-inwx \
+            --namespace cert-manager \
+            --set groupName=cert-manager-webhook-inwx.bitte-ein-bit.github.com \
+            --wait
+
+      - name: Deploy INWX credentials
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+          sops --decrypt platform/cert-manager/inwx-credentials.sops.yaml | kubectl apply -f -
+
+      - name: Apply ClusterIssuer
+        run: |
+          kubectl apply -f platform/cert-manager/cluster-issuer.yaml
+
+      - name: Install local-path-provisioner
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+          kubectl label namespace local-path-storage pod-security.kubernetes.io/enforce=privileged --overwrite
+          kubectl patch storageclass local-path \
+            -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
+            2>/dev/null || true

@@ -1,0 +1,51 @@
+name: Apps Apply
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/**'
+      - '.github/workflows/apps-apply.yml'
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          if ! command -v kubectl &>/dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          fi
+          if ! command -v helm &>/dev/null; then
+            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          fi
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          kubectl config set-cluster homelab \
+            --server=https://kubernetes.default.svc \
+            --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          kubectl config set-credentials runner \
+            --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          kubectl config set-context homelab --cluster=homelab --user=runner
+          kubectl config use-context homelab
+
+      - name: Add Helm repos
+        run: |
+          helm repo add bjw-s https://bjw-s-labs.github.io/helm-charts
+          helm repo update
+
+      - name: Deploy Vaultwarden
+        run: |
+          kubectl create namespace vaultwarden 2>/dev/null || true
+          kubectl label namespace vaultwarden pod-security.kubernetes.io/enforce=privileged --overwrite
+          helm dependency update apps/vaultwarden
+          helm upgrade --install vaultwarden apps/vaultwarden \
+            --namespace vaultwarden \
+            --values apps/vaultwarden/values.yaml \
+            --wait
