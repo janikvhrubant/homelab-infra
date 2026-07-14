@@ -130,3 +130,13 @@ jobs:
       - name: Apply ClusterSecretStore
         run: |
           kubectl apply -f platform/external-secrets/cluster-secret-store.yaml
+
+      - name: Install Kanidm
+        run: |
+          kubectl create namespace kanidm 2>/dev/null || true
+          kubectl label namespace kanidm pod-security.kubernetes.io/enforce=privileged --overwrite
+          helm dependency update platform/kanidm
+          helm upgrade --install kanidm platform/kanidm \
+            --namespace kanidm \
+            --values platform/kanidm/values.yaml \
+            --wait
