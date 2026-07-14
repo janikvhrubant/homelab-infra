@@ -146,3 +146,5 @@ jobs:
           kubectl logs -n kanidm -l app.kubernetes.io/name=kanidm --tail=30 2>/dev/null || true
           echo "=== Kanidm certificate ==="
           kubectl get certificate -n kanidm 2>/dev/null || true
+          kubectl describe certificate kanidm-tls -n kanidm 2>/dev/null || true
+          kubectl get challenges -n kanidm 2>/dev/null || true
