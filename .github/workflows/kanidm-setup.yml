@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       admin_password:
-        description: 'Kanidm admin password'
+        description: 'Kanidm idm_admin password'
         required: true
         type: string
 
@@ -33,10 +33,10 @@ jobs:
           kubectl config use-context homelab
 
       - name: Setup Kanidm
+        env:
+          ADMIN_PASS: ${{ inputs.admin_password }}
         run: |
-          ADMIN_PASS="${{ inputs.admin_password }}"
-
-          # Run kanidm client as a temporary pod
+          # Start temporary kanidm client pod
           kubectl run kanidm-client \
             --image=docker.io/kanidm/tools:1.3.3 \
             --restart=Never \
@@ -46,37 +46,27 @@ jobs:
           kubectl wait --for=condition=ready pod/kanidm-client \
             -n kanidm --timeout=60s
 
-          # Configure kanidm client
-          kubectl exec -n kanidm kanidm-client -- sh -c "
-            mkdir -p ~/.config/kanidm
-            cat > ~/.config/kanidm/config << EOF
-uri = \"https://kanidm.kanidm.svc.cluster.local:443\"
-verify_ca = false
-verify_hostnames = false
-EOF
-          "
+          # Write config file
+          kubectl exec -n kanidm kanidm-client -- mkdir -p /root/.config/kanidm
+          kubectl exec -n kanidm kanidm-client -- sh -c 'printf "[global]\nuri = \"https://kanidm.kanidm.svc.cluster.local:443\"\nverify_ca = false\nverify_hostnames = false\n" > /root/.config/kanidm/config'
 
+          # Login
           echo "=== Login ==="
-          kubectl exec -n kanidm kanidm-client -- sh -c "
-            echo '${ADMIN_PASS}' | kanidm login --name idm_admin
-          "
+          kubectl exec -n kanidm kanidm-client -- sh -c "echo '${ADMIN_PASS}' | kanidm login --name idm_admin"
 
+          # Create person
           echo "=== Create person janik ==="
-          kubectl exec -n kanidm kanidm-client -- sh -c "
-            kanidm person create janik 'Janik Hrubant' --name idm_admin || true
-          "
+          kubectl exec -n kanidm kanidm-client -- kanidm person create janik 'Janik Hrubant' --name idm_admin || true
 
+          # Create OIDC clients
           echo "=== Create OIDC clients ==="
           for app in nextcloud paperless immich matrix; do
-            kubectl exec -n kanidm kanidm-client -- sh -c "
-              kanidm system oauth2 create-basic ${app} ${app} \
-                https://${app}.lab.tanku.eu \
-                --name idm_admin || true
-            "
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 create-basic $app $app https://${app}.lab.tanku.eu \
+              --name idm_admin || true
           done
 
           echo "=== OAuth2 list ==="
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 list --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- kanidm system oauth2 list --name idm_admin || true
 
           kubectl delete pod kanidm-client -n kanidm
