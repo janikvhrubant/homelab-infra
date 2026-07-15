@@ -34,30 +34,7 @@ jobs:
 
       - name: Setup Kanidm
         run: |
-          kubectl exec -n kanidm kanidm-0 -- kanidm login \
-            --name admin \
-            --url https://localhost:443 \
-            --password "${{ inputs.admin_password }}" \
-            --skip-tls-verify || true
-
-          # Create main user
-          kubectl exec -n kanidm kanidm-0 -- kanidm person create janik \
-            --name admin \
-            --url https://localhost:443 \
-            --skip-tls-verify || true
-
-          # Create OIDC clients
-          for app in nextcloud paperless immich matrix; do
-            kubectl exec -n kanidm kanidm-0 -- kanidm system oauth2 create $app \
-              "https://${app}.lab.tanku.eu" \
-              "https://${app}.lab.tanku.eu/oauth2/callback" \
-              --name admin \
-              --url https://localhost:443 \
-              --skip-tls-verify || true
-          done
-
-          echo "=== Kanidm setup complete ==="
-          kubectl exec -n kanidm kanidm-0 -- kanidm system oauth2 list \
-            --name admin \
-            --url https://localhost:443 \
-            --skip-tls-verify || true
+          echo "=== Available binaries ==="
+          kubectl exec -n kanidm kanidm-0 -- ls /usr/sbin/ || true
+          kubectl exec -n kanidm kanidm-0 -- ls /usr/bin/ || true
+          kubectl exec -n kanidm kanidm-0 -- ls /sbin/ || true
