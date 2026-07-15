@@ -34,7 +34,18 @@ jobs:
 
       - name: Setup Kanidm
         run: |
-          echo "=== Available binaries ==="
-          kubectl exec -n kanidm kanidm-0 -- ls /usr/sbin/ || true
-          kubectl exec -n kanidm kanidm-0 -- ls /usr/bin/ || true
-          kubectl exec -n kanidm kanidm-0 -- ls /sbin/ || true
+          # Create main user
+          kubectl exec -n kanidm kanidm-0 -- kanidmd recover-account idm_admin 2>/dev/null || true
+
+          echo "=== Creating person janik ==="
+          kubectl exec -n kanidm kanidm-0 -- kanidmd person create \
+            --name janik --displayname "Janik Hrubant" 2>/dev/null || true
+
+          echo "=== Creating OIDC clients ==="
+          for app in nextcloud paperless immich matrix; do
+            kubectl exec -n kanidm kanidm-0 -- kanidmd system oauth2 create \
+              $app "${app^}" "https://${app}.lab.tanku.eu" 2>/dev/null || true
+          done
+
+          echo "=== OAuth2 clients ==="
+          kubectl exec -n kanidm kanidm-0 -- kanidmd system oauth2 list 2>/dev/null || true
