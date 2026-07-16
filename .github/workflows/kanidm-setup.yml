@@ -63,7 +63,8 @@ jobs:
 
           # Login
           echo "=== Login ==="
-          kubectl exec -n kanidm kanidm-client -- sh -c "echo '${ADMIN_PASS}' | kanidm login --name idm_admin"
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm login --name idm_admin --password "${ADMIN_PASS}"
 
           # Create person
           echo "=== Create person janik ==="
