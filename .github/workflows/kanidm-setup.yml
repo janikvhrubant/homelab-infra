@@ -51,7 +51,7 @@ jobs:
 
           # Write config file
           kubectl exec -n kanidm kanidm-client -- mkdir -p /root/.config
-          kubectl exec -n kanidm kanidm-client -- sh -c 'printf "uri = \"https://kanidm.kanidm.svc.cluster.local:443\"\nverify_ca = false\nverify_hostnames = false\n" > /root/.config/kanidm'
+          kubectl exec -n kanidm kanidm-client -- sh -c 'printf "uri = \"https://auth.lab.tanku.eu\"\nverify_ca = true\n" > /root/.config/kanidm'
 
           # Login
           echo "=== Login ==="
