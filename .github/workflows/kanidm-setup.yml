@@ -50,8 +50,8 @@ jobs:
             -n kanidm --timeout=60s
 
           # Write config file
-          kubectl exec -n kanidm kanidm-client -- mkdir -p /root/.config/kanidm
-          kubectl exec -n kanidm kanidm-client -- sh -c 'printf "[global]\nuri = \"https://kanidm.kanidm.svc.cluster.local:443\"\nverify_ca = false\nverify_hostnames = false\n" > /root/.config/kanidm/config'
+          kubectl exec -n kanidm kanidm-client -- mkdir -p /root/.config
+          kubectl exec -n kanidm kanidm-client -- sh -c 'printf "uri = \"https://kanidm.kanidm.svc.cluster.local:443\"\nverify_ca = false\nverify_hostnames = false\n" > /root/.config/kanidm'
 
           # Login
           echo "=== Login ==="
