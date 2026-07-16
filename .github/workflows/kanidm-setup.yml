@@ -36,6 +36,10 @@ jobs:
         env:
           ADMIN_PASS: ${{ inputs.admin_password }}
         run: |
+          # Find the kanidm service
+          echo "=== Kanidm services ==="
+          kubectl get svc -n kanidm
+
           # Cleanup any existing client pod
           kubectl delete pod kanidm-client -n kanidm --ignore-not-found=true
 
