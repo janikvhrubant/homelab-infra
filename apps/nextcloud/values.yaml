@@ -13,7 +13,7 @@ nextcloud:
     defaultConfigs:
       redis.config.php: false
     configs:
-      redis.config.php: |-
+      custom.config.php: |-
         <?php
         $CONFIG = array(
           'memcache.distributed' => '\OC\Memcache\Redis',
@@ -23,6 +23,12 @@ nextcloud:
             'port' => 6379,
           ),
         );
+
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 30
 
   internalDatabase:
     enabled: false
