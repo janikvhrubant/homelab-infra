@@ -12,6 +12,23 @@ nextcloud:
       usernameKey: nextcloud-username
     defaultConfigs:
       redis.config.php: false
+    configs:
+      custom.config.php: |-
+        <?php
+        $CONFIG = array(
+          'memcache.local' => '\OC\Memcache\APCu',
+          'memcache.distributed' => '\OC\Memcache\Redis',
+          'memcache.locking' => '\OC\Memcache\Redis',
+          'redis' => array(
+            'host' => 'redis.redis.svc.lab.tanku.eu',
+            'port' => 6379,
+          ),
+          'overwriteprotocol' => 'https',
+          'overwritehost' => 'cloud.lab.tanku.eu',
+          'trusted_proxies' => array('10.0.0.0/8', '10.244.0.0/16'),
+          'forwarded_for_headers' => array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'),
+          'allow_local_remote_servers' => true,
+        );
 
   startupProbe:
     enabled: true
@@ -51,6 +68,9 @@ nextcloud:
       - secretName: nextcloud-tls
         hosts:
           - *host
+
+  cronjob:
+    enabled: true
 
   persistence:
     enabled: true
