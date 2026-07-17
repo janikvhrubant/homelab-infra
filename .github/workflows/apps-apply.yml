@@ -95,6 +95,13 @@ jobs:
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ app:enable user_oidc 2>/dev/null || true
 
+            # Import Kanidm self-signed CA so Nextcloud trusts it
+            kubectl get secret kanidm-selfsigned-certificate \
+              -n kanidm -o jsonpath='{.data.ca\.crt}' | base64 -d | \
+              kubectl exec -i -n nextcloud deployment/nextcloud -- \
+                sh -c "cat > /tmp/kanidm-ca.crt && \
+                       php /var/www/html/occ security:certificates:import /tmp/kanidm-ca.crt" 2>/dev/null || true
+
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ user_oidc:provider kanidm \
                 --clientid="nextcloud" \
