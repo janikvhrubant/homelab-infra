@@ -29,6 +29,8 @@ nextcloud:
           'forwarded_for_headers' => array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'),
           'allow_local_remote_servers' => true,
           'logout_url' => 'https://home.lab.tanku.eu',
+          'cors.allowed-domains' => array('https://office.lab.tanku.eu', 'https://cloud.lab.tanku.eu'),
+          'trusted_domains' => array('localhost', 'cloud.lab.tanku.eu', 'office.lab.tanku.eu'),
         );
 
   startupProbe:
