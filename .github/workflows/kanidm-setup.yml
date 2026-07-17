@@ -67,8 +67,9 @@ jobs:
             kanidm login --name idm_admin --password "${ADMIN_PASS}"
 
           # Create person
-          echo "=== Create person janik ==="
+          echo "=== Create persons ==="
           kubectl exec -n kanidm kanidm-client -- kanidm person create janik 'Janik Hrubant' --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- kanidm person create app_admin 'App Admin' --name idm_admin || true
 
           # Create OIDC clients (idempotent - || true)
           echo "=== Create OIDC clients ==="
@@ -81,22 +82,29 @@ jobs:
               --name idm_admin || true
           done
 
-          # Create group for lab users and add janik
+          # Create groups and assign members
           echo "=== Create groups ==="
           kubectl exec -n kanidm kanidm-client -- \
             kanidm group create lab-users --name idm_admin || true
           kubectl exec -n kanidm kanidm-client -- \
-            kanidm group add-members lab-users janik --name idm_admin || true
+            kanidm group add-members lab-users janik app_admin --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm group create app-admins --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm group add-members app-admins app_admin --name idm_admin || true
           kubectl exec -n kanidm kanidm-client -- \
             kanidm group create nextcloud-admins --name idm_admin || true
           kubectl exec -n kanidm kanidm-client -- \
-            kanidm group add-members nextcloud-admins janik --name idm_admin || true
+            kanidm group add-members nextcloud-admins app_admin --name idm_admin || true
 
           # Create scope maps
           echo "=== Create scope maps ==="
           for app in paperless immich matrix; do
             kubectl exec -n kanidm kanidm-client -- \
               kanidm system oauth2 create-scope-map $app lab-users openid profile email \
+              --name idm_admin || true
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 create-scope-map $app app-admins openid profile email groups \
               --name idm_admin || true
           done
           # nextcloud gets groups scope for admin mapping
@@ -105,6 +113,9 @@ jobs:
             --name idm_admin || true
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 create-scope-map nextcloud nextcloud-admins openid profile email groups \
+            --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create-scope-map nextcloud app-admins openid profile email groups \
             --name idm_admin || true
 
           # Nextcloud-specific OAuth2 settings
