@@ -1,35 +1,77 @@
 app-template:
   controllers:
     main:
+      type: statefulset
       containers:
         main:
           image:
             repository: ghcr.io/paperless-ngx/paperless-ngx
-            tag: 2.5.4
+            tag: "2.14"
           env:
-            PAPERLESS_PORT: 8000
-            PAPERLESS_ADMIN_USER: admin
-            PAPERLESS_URL: https://paperless.khuedoan.com
-          envFrom:
-            - secret: "{{ .Release.Name }}-secret"
-        redis:
-          image:
-            repository: docker.io/library/redis
-            tag: 7.2.4
+            PAPERLESS_PORT: "8000"
+            PAPERLESS_URL: "https://paperless.lab.tanku.eu"
+            PAPERLESS_DBHOST: "postgres.postgres.svc.lab.tanku.eu"
+            PAPERLESS_DBNAME: "paperless"
+            PAPERLESS_DBUSER: "paperless"
+            PAPERLESS_DBPASS:
+              valueFrom:
+                secretKeyRef:
+                  name: paperless-credentials
+                  key: PAPERLESS_DBPASS
+            PAPERLESS_SECRET_KEY:
+              valueFrom:
+                secretKeyRef:
+                  name: paperless-credentials
+                  key: PAPERLESS_SECRET_KEY
+            PAPERLESS_REDIS: "redis://redis.redis.svc.lab.tanku.eu:6379"
+            PAPERLESS_ADMIN_USER: "app_admin"
+            PAPERLESS_ADMIN_MAIL: "admin@lab.tanku.eu"
+            PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
+            PAPERLESS_SOCIALACCOUNT_PROVIDERS: |
+              {
+                "openid_connect": {
+                  "APPS": [
+                    {
+                      "provider_id": "kanidm",
+                      "name": "Kanidm",
+                      "client_id": "paperless",
+                      "secret": "KANIDM_SECRET_PLACEHOLDER",
+                      "settings": {
+                        "server_url": "https://auth.lab.tanku.eu/oauth2/openid/paperless/.well-known/openid-configuration"
+                      }
+                    }
+                  ],
+                  "OAUTH_PKCE_ENABLED": true
+                }
+              }
+            PAPERLESS_DISABLE_REGULAR_LOGIN: "false"
+            PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL: "https"
+      statefulset:
+        volumeClaimTemplates:
+          - name: data
+            size: 20Gi
+            accessMode: ReadWriteOnce
+            globalMounts:
+              - path: /usr/src/paperless/data
+                subPath: data
+              - path: /usr/src/paperless/media
+                subPath: media
+
   service:
     main:
       ports:
         http:
           port: 8000
           protocol: HTTP
+
   ingress:
     main:
       enabled: true
-      className: nginx
+      className: traefik
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
-        - host: &host paperless.khuedoan.com
+        - host: &host paperless.lab.tanku.eu
           paths:
             - path: /
               pathType: Prefix
@@ -37,17 +79,6 @@ app-template:
                 name: main
                 port: http
       tls:
-        - hosts:
+        - secretName: paperless-tls
+          hosts:
             - *host
-          secretName: paperless-tls-certificate
-  persistence:
-    data:
-      accessMode: ReadWriteOnce
-      size: 10Gi
-      advancedMounts:
-        main:
-          main:
-            - path: /usr/src/paperless/data
-              subPath: data
-            - path: /usr/src/paperless/media
-              subPath: media

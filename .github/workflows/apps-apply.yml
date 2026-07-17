@@ -43,6 +43,7 @@ jobs:
         run: |
           helm repo add bjw-s https://bjw-s-labs.github.io/helm-charts
           helm repo add nextcloud https://nextcloud.github.io/helm/
+          helm repo add immich https://immich-app.github.io/immich-charts
           helm repo update
 
       - name: Deploy Vaultwarden
@@ -197,3 +198,62 @@ jobs:
           kubectl exec -n nextcloud deployment/nextcloud -- \
             php /var/www/html/occ config:app:set onlyoffice DocumentServerInternalUrl \
               --value="https://office.lab.tanku.eu/"
+
+      - name: Deploy Paperless
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          kubectl create namespace paperless 2>/dev/null || true
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+          sops --decrypt apps/paperless/paperless-credentials.sops.yaml | kubectl apply -f -
+
+          # Create PostgreSQL DB and user
+          PAPERLESS_DB_PASS=$(sops --decrypt apps/paperless/paperless-credentials.sops.yaml \
+            | grep 'PAPERLESS_DBPASS' | awk '{print $2}' | tr -d '"')
+          kubectl exec -n postgres postgres-0 -- psql -U postgres -tc \
+            "SELECT 1 FROM pg_roles WHERE rolname='paperless'" | grep -q 1 || \
+            kubectl exec -n postgres postgres-0 -- psql -U postgres \
+              -c "CREATE USER paperless WITH PASSWORD '${PAPERLESS_DB_PASS}';"
+          kubectl exec -n postgres postgres-0 -- psql -U postgres -tc \
+            "SELECT 1 FROM pg_database WHERE datname='paperless'" | grep -q 1 || \
+            kubectl exec -n postgres postgres-0 -- psql -U postgres \
+              -c "CREATE DATABASE paperless OWNER paperless;"
+
+          # Get Kanidm secret for paperless OIDC
+          PAPERLESS_KANIDM_SECRET=$(kubectl get secret kanidm-paperless-oidc \
+            -n paperless -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
+
+          helm dependency update apps/paperless
+          helm upgrade --install paperless apps/paperless \
+            --namespace paperless \
+            --values apps/paperless/values.yaml \
+            ${PAPERLESS_KANIDM_SECRET:+--set "app-template.controllers.main.containers.main.env.PAPERLESS_SOCIALACCOUNT_PROVIDERS={\"openid_connect\":{\"APPS\":[{\"provider_id\":\"kanidm\",\"name\":\"Kanidm\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_KANIDM_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/oauth2/openid/paperless/.well-known/openid-configuration\"}}],\"OAUTH_PKCE_ENABLED\":true}}"} \
+            --wait --timeout 5m
+
+      - name: Deploy Immich
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          kubectl create namespace immich 2>/dev/null || true
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+          sops --decrypt apps/immich/immich-credentials.sops.yaml | kubectl apply -f -
+
+          # Create PostgreSQL DB and user
+          IMMICH_DB_PASS=$(sops --decrypt apps/immich/immich-credentials.sops.yaml \
+            | grep 'db-password' | awk '{print $2}' | tr -d '"')
+          kubectl exec -n postgres postgres-0 -- psql -U postgres -tc \
+            "SELECT 1 FROM pg_roles WHERE rolname='immich'" | grep -q 1 || \
+            kubectl exec -n postgres postgres-0 -- psql -U postgres \
+              -c "CREATE USER immich WITH PASSWORD '${IMMICH_DB_PASS}';"
+          kubectl exec -n postgres postgres-0 -- psql -U postgres -tc \
+            "SELECT 1 FROM pg_database WHERE datname='immich'" | grep -q 1 || \
+            kubectl exec -n postgres postgres-0 -- psql -U postgres \
+              -c "CREATE DATABASE immich OWNER immich;"
+
+          helm dependency update apps/immich
+          helm upgrade --install immich apps/immich \
+            --namespace immich \
+            --values apps/immich/values.yaml \
+            --wait --timeout 10m

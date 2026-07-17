@@ -1,0 +1,50 @@
+immich:
+  image:
+    tag: "v1.134.0"
+
+  immich:
+    persistence:
+      library:
+        existingClaim: ""
+
+  env:
+    DB_HOSTNAME: "postgres.postgres.svc.lab.tanku.eu"
+    DB_DATABASE_NAME: "immich"
+    DB_USERNAME: "immich"
+    DB_PASSWORD:
+      valueFrom:
+        secretKeyRef:
+          name: immich-credentials
+          key: db-password
+    REDIS_HOSTNAME: "redis.redis.svc.lab.tanku.eu"
+    REDIS_PORT: "6379"
+
+  postgresql:
+    enabled: false
+
+  redis:
+    enabled: false
+
+  server:
+    ingress:
+      main:
+        enabled: true
+        className: traefik
+        annotations:
+          cert-manager.io/cluster-issuer: letsencrypt-prod
+          traefik.ingress.kubernetes.io/router.middlewares: ""
+        hosts:
+          - host: &host immich.lab.tanku.eu
+            paths:
+              - path: /
+                pathType: Prefix
+        tls:
+          - secretName: immich-tls
+            hosts:
+              - *host
+
+  persistence:
+    library:
+      enabled: true
+      size: 50Gi
+      accessMode: ReadWriteOnce
