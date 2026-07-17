@@ -70,13 +70,37 @@ jobs:
           echo "=== Create person janik ==="
           kubectl exec -n kanidm kanidm-client -- kanidm person create janik 'Janik Hrubant' --name idm_admin || true
 
-          # Create OIDC clients
+          # Create OIDC clients (idempotent - || true)
           echo "=== Create OIDC clients ==="
-          for app in nextcloud paperless immich matrix; do
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create nextcloud nextcloud https://cloud.lab.tanku.eu \
+            --name idm_admin || true
+          for app in paperless immich matrix; do
             kubectl exec -n kanidm kanidm-client -- \
               kanidm system oauth2 create $app $app https://${app}.lab.tanku.eu \
               --name idm_admin || true
           done
+
+          # Create group for lab users and add janik
+          echo "=== Create group lab-users ==="
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm group create lab-users --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm group add-members lab-users janik --name idm_admin || true
+
+          # Create scope maps: lab-users gets openid+profile+email for each app
+          echo "=== Create scope maps ==="
+          for app in nextcloud paperless immich matrix; do
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 create-scope-map $app lab-users openid profile email \
+              --name idm_admin || true
+          done
+
+          # Fix nextcloud landing URL
+          echo "=== Fix nextcloud landing URL ==="
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 set-landing-url nextcloud https://cloud.lab.tanku.eu \
+            --name idm_admin || true
 
           echo "=== OAuth2 list ==="
           kubectl exec -n kanidm kanidm-client -- kanidm system oauth2 list --name idm_admin || true
