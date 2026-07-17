@@ -9,6 +9,8 @@ nextcloud:
       enabled: true
       secretName: nextcloud-credentials
       passwordKey: nextcloud-password
+    defaultConfigs:
+      redis.config.php: false
     configs:
       redis.config.php: |-
         <?php
