@@ -56,3 +56,9 @@ nextcloud:
     enabled: true
     size: 50Gi
     accessMode: ReadWriteOnce
+
+  hostAliases:
+    - ip: "192.168.178.224"
+      hostnames:
+        - "auth.lab.tanku.eu"
+        - "cloud.lab.tanku.eu"
