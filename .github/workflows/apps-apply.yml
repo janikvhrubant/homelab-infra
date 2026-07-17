@@ -134,6 +134,11 @@ jobs:
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:app:set user_oidc allow_multiple_user_backends --value="0"
 
+            # Map nextcloud-admins group to Nextcloud admin
+            kubectl exec -n nextcloud deployment/nextcloud -- \
+              php /var/www/html/occ config:app:set user_oidc admin_groups \
+                --value="nextcloud-admins@auth.lab.tanku.eu"
+
             # Allow private network for Kanidm
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:system:set allow_local_remote_servers --value=true --type=bool
