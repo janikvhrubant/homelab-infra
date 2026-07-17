@@ -253,6 +253,19 @@ jobs:
               -c "CREATE DATABASE immich OWNER immich;"
 
           helm dependency update apps/immich
+          # Create PVC for immich library if not exists
+          kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-library
+  namespace: immich
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 50Gi
+EOF
           helm upgrade --install immich apps/immich \
             --namespace immich \
             --values apps/immich/values.yaml \
