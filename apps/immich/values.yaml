@@ -1,5 +1,7 @@
-image:
-  tag: "v1.134.0"
+immich:
+  persistence:
+    library:
+      existingClaim: immich-library
 
 env:
   DB_HOSTNAME: "postgres.postgres.svc.lab.tanku.eu"
@@ -35,7 +37,3 @@ server:
         - secretName: immich-tls
           hosts:
             - *host
-
-persistence:
-  library:
-    existingClaim: immich-library
