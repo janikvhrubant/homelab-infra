@@ -128,7 +128,6 @@ jobs:
                 --mapping-groups="groups" \
                 --group-provisioning=1 \
                 --unique-uid=0 \
-                --endsessionendpointuri="https://auth.lab.tanku.eu/oauth2/token/revoke" \
                 --postlogouturi="https://home.lab.tanku.eu"
 
             # Disable local login — Kanidm only
