@@ -23,6 +23,10 @@ jobs:
           if ! command -v helm &>/dev/null; then
             curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           fi
+          if ! command -v sops &>/dev/null; then
+            curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.13.2.linux.amd64 -o sops
+            chmod +x sops && sudo mv sops /usr/local/bin/
+          fi
 
       - name: Configure kubectl
         run: |
