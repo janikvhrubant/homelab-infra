@@ -254,18 +254,8 @@ jobs:
 
           helm dependency update apps/immich
           # Create PVC for immich library if not exists
-          kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: immich-library
-  namespace: immich
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 50Gi
-EOF
+          kubectl get pvc immich-library -n immich 2>/dev/null || \
+            kubectl apply -f apps/immich/pvc.yaml
           helm upgrade --install immich apps/immich \
             --namespace immich \
             --values apps/immich/values.yaml \
