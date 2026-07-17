@@ -1,0 +1,60 @@
+nextcloud:
+  image:
+    repository: docker.io/nextcloud
+    tag: "30"
+
+  nextcloud:
+    host: cloud.lab.tanku.eu
+    existingSecret:
+      enabled: true
+      secretName: nextcloud-credentials
+      passwordKey: nextcloud-password
+    configs:
+      redis.config.php: |-
+        <?php
+        $CONFIG = array(
+          'memcache.distributed' => '\OC\Memcache\Redis',
+          'memcache.locking' => '\OC\Memcache\Redis',
+          'redis' => array(
+            'host' => 'redis.redis.svc.cluster.local',
+            'port' => 6379,
+          ),
+        );
+
+  internalDatabase:
+    enabled: false
+
+  externalDatabase:
+    enabled: true
+    type: postgresql
+    host: postgres.postgres.svc.cluster.local
+    user: nextcloud
+    existingSecret:
+      enabled: true
+      secretName: nextcloud-credentials
+      passwordKey: db-password
+    database: nextcloud
+
+  redis:
+    enabled: false
+
+  ingress:
+    enabled: true
+    className: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      traefik.ingress.kubernetes.io/router.middlewares: traefik-redirect-https@kubernetescrd
+    hosts:
+      - host: &host cloud.lab.tanku.eu
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: nextcloud-tls
+        hosts:
+          - *host
+
+  persistence:
+    enabled: true
+    size: 50Gi
+    accessMode: ReadWriteOnce
