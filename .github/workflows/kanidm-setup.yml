@@ -82,19 +82,40 @@ jobs:
           done
 
           # Create group for lab users and add janik
-          echo "=== Create group lab-users ==="
+          echo "=== Create groups ==="
           kubectl exec -n kanidm kanidm-client -- \
             kanidm group create lab-users --name idm_admin || true
           kubectl exec -n kanidm kanidm-client -- \
             kanidm group add-members lab-users janik --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm group create nextcloud-admins --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm group add-members nextcloud-admins janik --name idm_admin || true
 
-          # Create scope maps: lab-users gets openid+profile+email for each app
+          # Create scope maps
           echo "=== Create scope maps ==="
-          for app in nextcloud paperless immich matrix; do
+          for app in paperless immich matrix; do
             kubectl exec -n kanidm kanidm-client -- \
               kanidm system oauth2 create-scope-map $app lab-users openid profile email \
               --name idm_admin || true
           done
+          # nextcloud gets groups scope for admin mapping
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create-scope-map nextcloud lab-users openid profile email groups \
+            --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create-scope-map nextcloud nextcloud-admins openid profile email groups \
+            --name idm_admin || true
+
+          # Nextcloud-specific OAuth2 settings
+          echo "=== Nextcloud OAuth2 settings ==="
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 prefer-short-username nextcloud --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 disable-consent-prompt nextcloud --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 add-redirect-url nextcloud \
+            https://cloud.lab.tanku.eu/apps/user_oidc/code --name idm_admin || true
 
           # Fix nextcloud landing URL
           echo "=== Fix nextcloud landing URL ==="
@@ -104,5 +125,15 @@ jobs:
 
           echo "=== OAuth2 list ==="
           kubectl exec -n kanidm kanidm-client -- kanidm system oauth2 list --name idm_admin || true
+
+          # Store nextcloud client secret as Kubernetes secret for apps-apply
+          echo "=== Store nextcloud client secret ==="
+          NEXTCLOUD_SECRET=$(kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 show-basic-secret nextcloud --name idm_admin)
+          kubectl create namespace nextcloud 2>/dev/null || true
+          kubectl create secret generic kanidm-nextcloud-oidc \
+            --namespace nextcloud \
+            --from-literal=client-secret="${NEXTCLOUD_SECRET}" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl delete pod kanidm-client -n kanidm
