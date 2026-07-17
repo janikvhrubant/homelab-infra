@@ -265,4 +265,5 @@ jobs:
             --version 0.9.3 \
             --namespace immich \
             --values apps/immich/values.yaml \
-            --wait --timeout 10m
+            --timeout 15m \
+            --wait
