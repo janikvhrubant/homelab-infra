@@ -42,7 +42,6 @@ nextcloud:
     className: traefik
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      traefik.ingress.kubernetes.io/router.middlewares: traefik-redirect-https@kubernetescrd
     hosts:
       - host: &host cloud.lab.tanku.eu
         paths:
