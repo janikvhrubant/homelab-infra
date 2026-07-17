@@ -191,3 +191,9 @@ jobs:
           kubectl exec -n nextcloud deployment/nextcloud -- \
             php /var/www/html/occ config:app:set onlyoffice jwt_header \
               --value="Authorization"
+          kubectl exec -n nextcloud deployment/nextcloud -- \
+            php /var/www/html/occ config:app:set onlyoffice StorageUrl \
+              --value="https://cloud.lab.tanku.eu/"
+          kubectl exec -n nextcloud deployment/nextcloud -- \
+            php /var/www/html/occ config:app:set onlyoffice DocumentServerInternalUrl \
+              --value="https://office.lab.tanku.eu/"
