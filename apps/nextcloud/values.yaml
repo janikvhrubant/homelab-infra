@@ -35,6 +35,7 @@ nextcloud:
       enabled: true
       secretName: nextcloud-credentials
       passwordKey: db-password
+      usernameKey: db-username
     database: nextcloud
 
   redis:
