@@ -25,7 +25,7 @@ nextcloud:
   externalDatabase:
     enabled: true
     type: postgresql
-    host: postgres.postgres.svc.cluster.local
+    host: postgres.postgres.svc.lab.tanku.eu
     user: nextcloud
     existingSecret:
       enabled: true
