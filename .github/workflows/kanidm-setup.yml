@@ -7,6 +7,11 @@ on:
         description: 'Kanidm idm_admin password'
         required: true
         type: string
+      create_reset_tokens:
+        description: 'Create credential reset tokens for janik and app_admin'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   setup:
@@ -146,5 +151,30 @@ jobs:
             --namespace nextcloud \
             --from-literal=client-secret="${NEXTCLOUD_SECRET}" \
             --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl delete pod kanidm-client -n kanidm
+
+      - name: Generate credential reset tokens
+        if: ${{ inputs.create_reset_tokens == true }}
+        run: |
+          KANIDM_IP=$(kubectl get svc kanidm -n kanidm -o jsonpath='{.spec.clusterIP}')
+          kubectl run kanidm-client \
+            --image=docker.io/kanidm/tools:1.3.3 \
+            --restart=Never \
+            --namespace=kanidm \
+            --command -- sleep 120 2>/dev/null || true
+          kubectl wait --for=condition=ready pod/kanidm-client -n kanidm --timeout=60s
+          kubectl exec -n kanidm kanidm-client -- mkdir -p /root/.config
+          kubectl exec -n kanidm kanidm-client -- sh -c "printf 'uri = \"https://${KANIDM_IP}:443\"\nverify_ca = false\nverify_hostnames = false\n' > /root/.config/kanidm"
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm login --name idm_admin --password "${{ inputs.admin_password }}"
+
+          echo "=== Reset token for janik ==="
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm person credential create-reset-token janik --name idm_admin
+
+          echo "=== Reset token for app_admin ==="
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm person credential create-reset-token app_admin --name idm_admin
 
           kubectl delete pod kanidm-client -n kanidm
