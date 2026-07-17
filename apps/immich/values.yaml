@@ -1,47 +1,41 @@
-immich:
-  image:
-    tag: "v1.134.0"
+image:
+  tag: "v1.134.0"
 
-  env:
-    DB_HOSTNAME: "postgres.postgres.svc.lab.tanku.eu"
-    DB_DATABASE_NAME: "immich"
-    DB_USERNAME: "immich"
-    DB_PASSWORD:
-      valueFrom:
-        secretKeyRef:
-          name: immich-credentials
-          key: db-password
-    REDIS_HOSTNAME: "redis.redis.svc.lab.tanku.eu"
-    REDIS_PORT: "6379"
+env:
+  DB_HOSTNAME: "postgres.postgres.svc.lab.tanku.eu"
+  DB_DATABASE_NAME: "immich"
+  DB_USERNAME: "immich"
+  DB_PASSWORD:
+    valueFrom:
+      secretKeyRef:
+        name: immich-credentials
+        key: db-password
+  REDIS_HOSTNAME: "redis.redis.svc.lab.tanku.eu"
+  REDIS_PORT: "6379"
 
-  postgresql:
-    enabled: false
+postgresql:
+  enabled: false
 
-  redis:
-    enabled: false
+redis:
+  enabled: false
 
-  server:
-    ingress:
-      main:
-        enabled: true
-        className: traefik
-        annotations:
-          cert-manager.io/cluster-issuer: letsencrypt-prod
-        hosts:
-          - host: &host immich.lab.tanku.eu
-            paths:
-              - path: /
-                pathType: Prefix
-        tls:
-          - secretName: immich-tls
-            hosts:
-              - *host
+server:
+  ingress:
+    main:
+      enabled: true
+      className: traefik
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      hosts:
+        - host: &host immich.lab.tanku.eu
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: immich-tls
+          hosts:
+            - *host
 
-  persistence:
-    library:
-      existingClaim: immich-library
-
-immich:
-  persistence:
-    library:
-      existingClaim: immich-library
+persistence:
+  library:
+    existingClaim: immich-library
