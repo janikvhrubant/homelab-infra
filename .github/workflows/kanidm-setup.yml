@@ -74,7 +74,7 @@ jobs:
           echo "=== Create OIDC clients ==="
           for app in nextcloud paperless immich matrix; do
             kubectl exec -n kanidm kanidm-client -- \
-              kanidm system oauth2 create-basic $app $app https://${app}.lab.tanku.eu \
+              kanidm system oauth2 create $app $app https://${app}.lab.tanku.eu \
               --name idm_admin || true
           done
 

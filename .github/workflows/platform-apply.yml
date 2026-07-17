@@ -131,10 +131,34 @@ jobs:
         run: |
           kubectl apply -f platform/external-secrets/cluster-secret-store.yaml
 
+      - name: Install PostgreSQL
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          kubectl create namespace postgres 2>/dev/null || true
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+          sops --decrypt platform/postgres/postgres-credentials.sops.yaml | kubectl apply -f -
+          helm dependency update platform/postgres
+          helm upgrade --install postgres platform/postgres \
+            --namespace postgres \
+            --values platform/postgres/values.yaml \
+            --wait
+
+      - name: Install Redis
+        run: |
+          kubectl create namespace redis 2>/dev/null || true
+          helm dependency update platform/redis
+          helm upgrade --install redis platform/redis \
+            --namespace redis \
+            --values platform/redis/values.yaml \
+            --wait
+
       - name: Install Kanidm
         run: |
           kubectl create namespace kanidm 2>/dev/null || true
           kubectl label namespace kanidm pod-security.kubernetes.io/enforce=privileged --overwrite
+          kubectl apply -f platform/kanidm/servers-transport.yaml
           helm dependency update platform/kanidm
           helm upgrade --install kanidm platform/kanidm \
             --namespace kanidm \

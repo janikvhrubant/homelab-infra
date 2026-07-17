@@ -1,0 +1,36 @@
+app-template:
+  controllers:
+    main:
+      type: statefulset
+      containers:
+        main:
+          image:
+            repository: docker.io/library/postgres
+            tag: "16"
+          env:
+            POSTGRES_USER: postgres
+            POSTGRES_DB: postgres
+            POSTGRES_PASSWORD:
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            PGDATA: /var/lib/postgresql/data/pgdata
+      statefulset:
+        volumeClaimTemplates:
+          - name: data
+            size: 10Gi
+            globalMounts:
+              - path: /var/lib/postgresql/data
+            accessMode: "ReadWriteOnce"
+  service:
+    main:
+      ports:
+        http:
+          enabled: false
+        postgres:
+          port: 5432
+          protocol: TCP
+  ingress:
+    main:
+      enabled: false

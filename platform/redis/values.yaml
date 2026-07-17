@@ -1,0 +1,33 @@
+app-template:
+  controllers:
+    main:
+      type: statefulset
+      containers:
+        main:
+          image:
+            repository: docker.io/library/redis
+            tag: "7"
+          args:
+            - redis-server
+            - --save
+            - "60 1"
+            - --loglevel
+            - warning
+      statefulset:
+        volumeClaimTemplates:
+          - name: data
+            size: 1Gi
+            globalMounts:
+              - path: /data
+            accessMode: "ReadWriteOnce"
+  service:
+    main:
+      ports:
+        http:
+          enabled: false
+        redis:
+          port: 6379
+          protocol: TCP
+  ingress:
+    main:
+      enabled: false
