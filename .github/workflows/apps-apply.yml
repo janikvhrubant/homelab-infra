@@ -257,11 +257,12 @@ jobs:
             kubectl exec -n postgres postgres-0 -- psql -U postgres \
               -c "CREATE DATABASE immich OWNER immich;"
 
-          helm dependency update apps/immich
           # Create PVC for immich library if not exists
           kubectl get pvc immich-library -n immich 2>/dev/null || \
             kubectl apply -f apps/immich/pvc.yaml
-          helm upgrade --install immich apps/immich \
+
+          helm upgrade --install immich immich/immich \
+            --version 0.9.3 \
             --namespace immich \
             --values apps/immich/values.yaml \
             --wait --timeout 10m
