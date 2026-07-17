@@ -27,25 +27,12 @@ app-template:
             PAPERLESS_ADMIN_USER: "app_admin"
             PAPERLESS_ADMIN_MAIL: "admin@lab.tanku.eu"
             PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
-            PAPERLESS_SOCIALACCOUNT_PROVIDERS: |
-              {
-                "openid_connect": {
-                  "APPS": [
-                    {
-                      "provider_id": "kanidm",
-                      "name": "Kanidm",
-                      "client_id": "paperless",
-                      "secret": "KANIDM_SECRET_PLACEHOLDER",
-                      "settings": {
-                        "server_url": "https://auth.lab.tanku.eu/oauth2/openid/paperless/.well-known/openid-configuration"
-                      }
-                    }
-                  ],
-                  "OAUTH_PKCE_ENABLED": true
-                }
-              }
             PAPERLESS_DISABLE_REGULAR_LOGIN: "false"
             PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL: "https"
+          envFrom:
+            - secretRef:
+                name: paperless-oidc-config
+                optional: true
       statefulset:
         volumeClaimTemplates:
           - name: data

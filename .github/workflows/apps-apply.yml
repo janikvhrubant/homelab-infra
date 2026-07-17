@@ -220,15 +220,20 @@ jobs:
             kubectl exec -n postgres postgres-0 -- psql -U postgres \
               -c "CREATE DATABASE paperless OWNER paperless;"
 
-          # Get Kanidm secret for paperless OIDC
+          # Get Kanidm secret for paperless OIDC and store as env secret
           PAPERLESS_KANIDM_SECRET=$(kubectl get secret kanidm-paperless-oidc \
             -n paperless -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
+          if [ -n "${PAPERLESS_KANIDM_SECRET}" ]; then
+            kubectl create secret generic paperless-oidc-config \
+              --namespace paperless \
+              --from-literal=PAPERLESS_SOCIALACCOUNT_PROVIDERS="{\"openid_connect\":{\"APPS\":[{\"provider_id\":\"kanidm\",\"name\":\"Kanidm\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_KANIDM_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/oauth2/openid/paperless/.well-known/openid-configuration\"}}],\"OAUTH_PKCE_ENABLED\":true}}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          fi
 
           helm dependency update apps/paperless
           helm upgrade --install paperless apps/paperless \
             --namespace paperless \
             --values apps/paperless/values.yaml \
-            ${PAPERLESS_KANIDM_SECRET:+--set "app-template.controllers.main.containers.main.env.PAPERLESS_SOCIALACCOUNT_PROVIDERS={\"openid_connect\":{\"APPS\":[{\"provider_id\":\"kanidm\",\"name\":\"Kanidm\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_KANIDM_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/oauth2/openid/paperless/.well-known/openid-configuration\"}}],\"OAUTH_PKCE_ENABLED\":true}}"} \
             --wait --timeout 5m
 
       - name: Deploy Immich
