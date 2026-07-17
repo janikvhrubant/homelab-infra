@@ -83,6 +83,8 @@ jobs:
           helm upgrade --install nextcloud apps/nextcloud \
             --namespace nextcloud \
             --values apps/nextcloud/values.yaml \
+            --set "nextcloud.extraEnv[0].name=DEPLOY_DATE" \
+            --set "nextcloud.extraEnv[0].value=$(date +%s)" \
             --wait --timeout 10m
 
           # Configure OIDC via user_oidc app (idempotent)
