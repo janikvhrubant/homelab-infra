@@ -291,7 +291,6 @@ console.log('OpenID config written to DB');
       - name: Deploy Immich
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-          IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
         run: |
           kubectl create namespace immich 2>/dev/null || true
           echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
@@ -334,24 +333,51 @@ console.log('OpenID config written to DB');
             ]}
           ]" 2>/dev/null || true
 
-          # Configure Immich OAuth via API
+          # Remove legacy redirect-login middleware if it exists (caused OAuth callback loop)
+          # This middleware was used as a workaround but breaks the OAuth flow by redirecting
+          # /auth/login?code=...&state=... to / before Immich can process the callback.
+          kubectl delete middleware -n immich redirect-login 2>/dev/null || true
+          kubectl annotate ingress -n immich immich-server \
+            'traefik.ingress.kubernetes.io/router.middlewares-' 2>/dev/null || true
+
+          # Configure Immich OAuth via DB (API requires auth, DB is reliable)
+          # IMPORTANT: autoLaunch must be false — with true, Immich starts a new OAuth flow
+          # on every visit to /auth/login, overwriting the stored PKCE state and breaking
+          # the callback. Users click the "Login with Authentik" button manually.
+          # IMPORTANT: passwordLogin must be an object {"enabled": false}, not a boolean.
+          # The Immich schema changed and a bare `false` causes a ValidationError that
+          # silently breaks all OAuth callbacks.
           IMMICH_CLIENT_SECRET=$(kubectl get secret authentik-immich-oidc \
             -n immich -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
           if [ -n "${IMMICH_CLIENT_SECRET}" ]; then
-            # Wait for Immich server to be ready
+            # Wait for Immich DB to be ready
+            kubectl rollout status statefulset/immich-db -n immich --timeout=120s
+
+            kubectl exec -n immich immich-db-0 -- psql -U immich -d immich -c "
+              INSERT INTO system_metadata (key, value) VALUES ('system-config', '{}'::jsonb)
+              ON CONFLICT (key) DO NOTHING;
+              UPDATE system_metadata SET value = jsonb_build_object(
+                'oauth', jsonb_build_object(
+                  'enabled', true,
+                  'clientId', 'immich',
+                  'clientSecret', '${IMMICH_CLIENT_SECRET}',
+                  'issuerUrl', 'https://auth.lab.tanku.eu/application/o/immich/',
+                  'scope', 'openid email profile',
+                  'signingAlgorithm', 'RS256',
+                  'autoLaunch', false,
+                  'autoRegister', true,
+                  'buttonText', 'Login with Authentik',
+                  'storageLabelClaim', 'preferred_username',
+                  'profileImageClaim', 'picture',
+                  'defaultStorageQuota', 0
+                ),
+                'passwordLogin', jsonb_build_object('enabled', false)
+              )
+              WHERE key = 'system-config';
+            " && echo "Immich OAuth configured via DB" || echo "WARNING: Could not configure Immich OAuth"
+
+            kubectl rollout restart deployment/immich-server -n immich
             kubectl rollout status deployment/immich-server -n immich --timeout=300s
-
-            # Get current system config and merge OAuth settings
-            CURRENT_CONFIG=$(kubectl exec -n immich deployment/immich-server -- \
-              curl -sf "http://localhost:2283/api/system-config" \
-              -H "x-api-key: ${IMMICH_API_KEY}" 2>/dev/null || echo "{}")
-
-            kubectl exec -n immich deployment/immich-server -- \
-              curl -sf -X PUT "http://localhost:2283/api/system-config" \
-              -H "x-api-key: ${IMMICH_API_KEY}" \
-              -H "Content-Type: application/json" \
-              -d "$(echo "${CURRENT_CONFIG}" | python3 -c 'import sys,json; c=json.load(sys.stdin); c.setdefault("oauth",{}).update({"enabled":True,"issuerUrl":"https://auth.lab.tanku.eu/application/o/immich/","clientId":"immich","clientSecret":"'"${IMMICH_CLIENT_SECRET}"'","scope":"openid email profile","signingAlgorithm":"RS256","autoLaunch":True,"autoRegister":True,"buttonText":"Login with Authentik","storageLabelClaim":"preferred_username","profileImageClaim":"picture","logoutRedirectUri":"https://auth.lab.tanku.eu/if/session-end/"}); c["passwordLogin"]={"enabled":False}; print(json.dumps(c))')" \
-              && echo "Immich OAuth configured via API" || echo "WARNING: Could not configure Immich OAuth"
           else
             echo "WARNING: Could not retrieve Authentik client secret for Immich - run authentik-setup workflow first"
           fi
