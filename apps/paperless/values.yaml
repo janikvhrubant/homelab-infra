@@ -29,6 +29,7 @@ app-template:
             PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
             PAPERLESS_DISABLE_REGULAR_LOGIN: "true"
             PAPERLESS_SOCIALACCOUNT_AUTO_LOGIN: "true"
+            PAPERLESS_SOCIALACCOUNT_AUTO_SIGNUP: "true"
             PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL: "https"
             PAPERLESS_LOGOUT_REDIRECT_URL: "https://auth.lab.tanku.eu/if/session-end/"
           envFrom:
