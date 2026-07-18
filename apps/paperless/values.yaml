@@ -143,7 +143,7 @@ app-template:
       className: traefik
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
-        traefik.ingress.kubernetes.io/router.middlewares: authentik-forwardauth-authentik@kubernetescrd
+        traefik.ingress.kubernetes.io/router.middlewares: ""
       hosts:
         - host: &host paperless.lab.tanku.eu
           paths:
