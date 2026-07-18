@@ -272,3 +272,11 @@ jobs:
             {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/initialDelaySeconds","value":60},
             {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/failureThreshold","value":60}
           ]' 2>/dev/null || true
+
+          # Add hostAliases for internal DNS resolution
+          TRAEFIK_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
+          kubectl patch deployment immich-server -n immich --type=json -p="[
+            {\"op\": \"add\", \"path\": \"/spec/template/spec/hostAliases\", \"value\": [
+              {\"ip\": \"${TRAEFIK_IP}\", \"hostnames\": [\"auth.lab.tanku.eu\"]}
+            ]}
+          ]" 2>/dev/null || true
