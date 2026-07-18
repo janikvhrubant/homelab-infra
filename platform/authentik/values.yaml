@@ -45,6 +45,10 @@ authentik:
           hosts:
             - auth.lab.tanku.eu
 
+  blueprints:
+    configMaps:
+      - authentik-blueprints
+
   worker:
     replicas: 1
 

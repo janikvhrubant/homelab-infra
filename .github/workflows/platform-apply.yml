@@ -182,6 +182,11 @@ jobs:
             | grep 'secret-key' | awk '{print $2}' | tr -d '"')
 
           helm dependency update platform/authentik
+          # Deploy blueprint ConfigMap before helm so it's available on startup
+          kubectl create configmap authentik-blueprints \
+            --namespace authentik \
+            --from-file=homelab.yaml=platform/authentik/blueprints/homelab.yaml \
+            --dry-run=client -o yaml | kubectl apply -f -
           helm upgrade --install authentik platform/authentik \
             --namespace authentik \
             --values platform/authentik/values.yaml \
