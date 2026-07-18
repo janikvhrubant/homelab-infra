@@ -27,7 +27,8 @@ app-template:
             PAPERLESS_ADMIN_USER: "app_admin"
             PAPERLESS_ADMIN_MAIL: "admin@lab.tanku.eu"
             PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
-            PAPERLESS_DISABLE_REGULAR_LOGIN: "false"
+            PAPERLESS_DISABLE_REGULAR_LOGIN: "true"
+            PAPERLESS_SOCIALACCOUNT_AUTO_LOGIN: "true"
             PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL: "https"
             PAPERLESS_LOGOUT_REDIRECT_URL: "https://oauth2-proxy.lab.tanku.eu/oauth2/sign_out?rd=https://auth.lab.tanku.eu/ui/logout"
           envFrom:
