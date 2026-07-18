@@ -82,18 +82,16 @@ jobs:
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 create oauth2-proxy "Forward Auth Proxy" https://oauth2-proxy.lab.tanku.eu \
             --name idm_admin || true
-          # oauth2-proxy uses /oauth2/callback as its callback path
+          # traefik-forward-auth ignores AUTH_HOST and uses X-Forwarded-Host,
+          # so redirect_uri becomes <app-host>/_oauth — register all app hosts
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 remove-redirect-url oauth2-proxy \
             https://oauth2-proxy.lab.tanku.eu/oauth2/callback --name idm_admin || true
-          for host in photos.lab.tanku.eu paperless.lab.tanku.eu cloud.lab.tanku.eu oauth2-proxy.lab.tanku.eu; do
+          for host in oauth2-proxy.lab.tanku.eu photos.lab.tanku.eu paperless.lab.tanku.eu cloud.lab.tanku.eu; do
             kubectl exec -n kanidm kanidm-client -- \
-              kanidm system oauth2 remove-redirect-url oauth2-proxy \
+              kanidm system oauth2 add-redirect-url oauth2-proxy \
               https://${host}/_oauth --name idm_admin || true
           done
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 add-redirect-url oauth2-proxy \
-            https://oauth2-proxy.lab.tanku.eu/_oauth --name idm_admin || true
           # traefik-forward-auth only supports RS256 — enable legacy crypto on Kanidm client
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 warning-enable-legacy-crypto oauth2-proxy --name idm_admin || true
