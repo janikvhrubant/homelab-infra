@@ -185,8 +185,8 @@ jobs:
           helm upgrade --install authentik platform/authentik \
             --namespace authentik \
             --values platform/authentik/values.yaml \
-            --set "authentik.secret_key=${AUTHENTIK_SECRET_KEY}" \
-            --set "authentik.postgresql.password=${AUTHENTIK_DB_PASS}" \
+            --set "authentik.authentik.secret_key=${AUTHENTIK_SECRET_KEY}" \
+            --set "authentik.authentik.postgresql.password=${AUTHENTIK_DB_PASS}" \
             --wait --timeout 10m
 
           kubectl apply -f platform/authentik/middleware.yaml
