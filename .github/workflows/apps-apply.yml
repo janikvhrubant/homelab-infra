@@ -280,3 +280,6 @@ jobs:
               {\"ip\": \"${TRAEFIK_IP}\", \"hostnames\": [\"auth.lab.tanku.eu\"]}
             ]}
           ]" 2>/dev/null || true
+          # NOTE: Immich OAuth is configured via the Admin UI (persisted in DB), not env vars.
+          # Settings: Administration → OAuth → issuerUrl=https://auth.lab.tanku.eu/oauth2/openid/immich
+          # clientId=immich, clientSecret from kanidm-immich-oidc secret, autoLaunch=true
