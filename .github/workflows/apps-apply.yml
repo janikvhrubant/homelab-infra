@@ -254,3 +254,9 @@ jobs:
             --namespace immich \
             --values apps/immich/values.yaml \
             --timeout 15m
+
+          # Patch startup probe - chart ignores our initialDelaySeconds
+          kubectl patch deployment immich-server -n immich --type=json -p='[
+            {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/initialDelaySeconds","value":60},
+            {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/failureThreshold","value":60}
+          ]' 2>/dev/null || true
