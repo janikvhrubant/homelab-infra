@@ -1,0 +1,97 @@
+# Per-app /_oauth callback routing for traefik-forward-auth.
+# traefik-forward-auth sets redirect_uri to <app-host>/_oauth (from X-Forwarded-Host).
+# These Ingresses route /_oauth → traefik-forward-auth WITHOUT ForwardAuth middleware.
+# ExternalName services bridge to oauth2-proxy in its own namespace.
+---
+# immich namespace
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-forward-auth
+  namespace: immich
+spec:
+  type: ExternalName
+  externalName: oauth2-proxy.oauth2-proxy.svc.lab.tanku.eu
+  ports:
+    - port: 4181
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oauth2-callback
+  namespace: immich
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: photos.lab.tanku.eu
+      http:
+        paths:
+          - path: /_oauth
+            pathType: Prefix
+            backend:
+              service:
+                name: traefik-forward-auth
+                port:
+                  number: 4181
+---
+# paperless namespace
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-forward-auth
+  namespace: paperless
+spec:
+  type: ExternalName
+  externalName: oauth2-proxy.oauth2-proxy.svc.lab.tanku.eu
+  ports:
+    - port: 4181
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oauth2-callback
+  namespace: paperless
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: paperless.lab.tanku.eu
+      http:
+        paths:
+          - path: /_oauth
+            pathType: Prefix
+            backend:
+              service:
+                name: traefik-forward-auth
+                port:
+                  number: 4181
+---
+# nextcloud namespace
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-forward-auth
+  namespace: nextcloud
+spec:
+  type: ExternalName
+  externalName: oauth2-proxy.oauth2-proxy.svc.lab.tanku.eu
+  ports:
+    - port: 4181
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oauth2-callback
+  namespace: nextcloud
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: cloud.lab.tanku.eu
+      http:
+        paths:
+          - path: /_oauth
+            pathType: Prefix
+            backend:
+              service:
+                name: traefik-forward-auth
+                port:
+                  number: 4181

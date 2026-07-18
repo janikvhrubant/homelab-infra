@@ -188,3 +188,4 @@ jobs:
             --values platform/oauth2-proxy/values.yaml \
             --wait
           kubectl apply -f platform/oauth2-proxy/middleware.yaml
+          kubectl apply -f platform/oauth2-proxy/callback-ingresses.yaml
