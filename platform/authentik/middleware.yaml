@@ -5,7 +5,7 @@ metadata:
   namespace: authentik
 spec:
   forwardAuth:
-    address: http://authentik-server.authentik.svc.lab.tanku.eu:9000/outpost.goauthentik.io/auth/traefik
+    address: http://authentik-server.authentik.svc.lab.tanku.eu/outpost.goauthentik.io/auth/traefik
     trustForwardHeader: true
     authResponseHeaders:
       - X-authentik-username
