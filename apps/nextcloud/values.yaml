@@ -28,7 +28,7 @@ nextcloud:
           'trusted_proxies' => array('10.0.0.0/8', '10.244.0.0/16'),
           'forwarded_for_headers' => array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'),
           'allow_local_remote_servers' => true,
-          'logout_url' => 'https://oauth2-proxy.lab.tanku.eu/_oauth/logout',
+          'logout_url' => 'https://auth.lab.tanku.eu/application/o/nextcloud/end-session/',
           'cors.allowed-domains' => array('https://office.lab.tanku.eu', 'https://cloud.lab.tanku.eu'),
           'trusted_domains' => array('localhost', 'cloud.lab.tanku.eu', 'office.lab.tanku.eu'),
         );
@@ -62,7 +62,7 @@ nextcloud:
     className: traefik
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
-      traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-forwardauth-kanidm@kubernetescrd
+      traefik.ingress.kubernetes.io/router.middlewares: authentik-forwardauth-authentik@kubernetescrd
     hosts:
       - host: &host cloud.lab.tanku.eu
         paths:

@@ -1,0 +1,251 @@
+name: Authentik Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &>/dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          fi
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          kubectl config set-cluster homelab \
+            --server=https://kubernetes.default.svc \
+            --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          kubectl config set-credentials runner \
+            --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          kubectl config set-context homelab --cluster=homelab --user=runner
+          kubectl config use-context homelab
+
+      - name: Wait for Authentik to be ready
+        run: |
+          echo "Waiting for Authentik server deployment..."
+          kubectl rollout status deployment/authentik-server -n authentik --timeout=300s
+          # Additional wait for the API to be ready
+          AUTHENTIK_IP=$(kubectl get svc authentik-server -n authentik -o jsonpath='{.spec.clusterIP}')
+          for i in $(seq 1 30); do
+            if kubectl exec -n authentik deployment/authentik-server -- \
+                curl -sf "http://localhost:9000/api/v3/root/config/" > /dev/null 2>&1; then
+              echo "Authentik API is ready"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 10
+          done
+
+      - name: Setup Authentik via API
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          # Get bootstrap token from secret
+          AUTHENTIK_TOKEN=$(kubectl get secret authentik-credentials -n authentik \
+            -o jsonpath='{.data.bootstrap-token}' | base64 -d)
+          AUTHENTIK_URL="http://authentik-server.authentik.svc.lab.tanku.eu:9000"
+
+          # Helper: Authentik API call
+          ak_api() {
+            local method="$1"
+            local path="$2"
+            local data="${3:-}"
+            if [ -n "$data" ]; then
+              kubectl exec -n authentik deployment/authentik-server -- \
+                curl -sf -X "$method" "${AUTHENTIK_URL}/api/v3/${path}" \
+                -H "Authorization: Bearer ${AUTHENTIK_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$data"
+            else
+              kubectl exec -n authentik deployment/authentik-server -- \
+                curl -sf -X "$method" "${AUTHENTIK_URL}/api/v3/${path}" \
+                -H "Authorization: Bearer ${AUTHENTIK_TOKEN}"
+            fi
+          }
+
+          # Helper: get or create group, return PK
+          ensure_group() {
+            local name="$1"
+            local existing=$(ak_api GET "core/groups/?name=${name}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')")
+            if [ -z "$existing" ]; then
+              echo "Creating group: $name"
+              ak_api POST "core/groups/" "{\"name\":\"${name}\",\"is_superuser\":false}" | python3 -c "import sys,json; print(json.load(sys.stdin)['pk'])"
+            else
+              echo "Group $name already exists: $existing"
+              echo "$existing"
+            fi
+          }
+
+          echo "=== Create groups ==="
+          APP_ADMINS_PK=$(ensure_group "app_admins")
+          APP_USERS_PK=$(ensure_group "app_users")
+          echo "app_admins PK: $APP_ADMINS_PK"
+          echo "app_users PK: $APP_USERS_PK"
+
+          # Helper: get or create OIDC provider, return PK
+          ensure_oidc_provider() {
+            local name="$1"
+            local client_id="$2"
+            local redirect_uris="$3"
+            local existing=$(ak_api GET "providers/oauth2/?name=${name}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')")
+            if [ -z "$existing" ]; then
+              echo "Creating OIDC provider: $name"
+              ak_api POST "providers/oauth2/" "{
+                \"name\": \"${name}\",
+                \"client_id\": \"${client_id}\",
+                \"client_type\": \"confidential\",
+                \"redirect_uris\": \"${redirect_uris}\",
+                \"authorization_flow\": \"$(get_flow implicit-consent)\",
+                \"sub_mode\": \"hashed_user_id\",
+                \"include_claims_in_id_token\": true,
+                \"signing_key\": \"$(get_signing_key)\"
+              }" | python3 -c "import sys,json; print(json.load(sys.stdin)['pk'])"
+            else
+              echo "Provider $name already exists: $existing"
+              echo "$existing"
+            fi
+          }
+
+          # Helper: get default implicit consent flow PK
+          get_flow() {
+            local slug="$1"
+            ak_api GET "flows/instances/?designation=authorization&slug=${slug}" | \
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')" 2>/dev/null || \
+            ak_api GET "flows/instances/?designation=authorization" | \
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')"
+          }
+
+          # Helper: get default signing key PK
+          get_signing_key() {
+            ak_api GET "crypto/certificatekeypairs/?has_key=true&include_details=false" | \
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')"
+          }
+
+          # Helper: get or create application, return slug
+          ensure_application() {
+            local name="$1"
+            local slug="$2"
+            local provider_pk="$3"
+            local launch_url="$4"
+            local existing=$(ak_api GET "core/applications/?slug=${slug}" | python3 -c "import sys,json; d=json.load(sys.stdin); print('exists' if d['count']>0 else '')")
+            if [ -z "$existing" ]; then
+              echo "Creating application: $name"
+              ak_api POST "core/applications/" "{
+                \"name\": \"${name}\",
+                \"slug\": \"${slug}\",
+                \"provider\": ${provider_pk},
+                \"meta_launch_url\": \"${launch_url}\",
+                \"policy_engine_mode\": \"any\"
+              }"
+            else
+              echo "Application $slug already exists"
+            fi
+          }
+
+          echo "=== Create OIDC Providers and Applications ==="
+
+          # Nextcloud
+          NC_PROVIDER_PK=$(ensure_oidc_provider \
+            "nextcloud" \
+            "nextcloud" \
+            "https://cloud.lab.tanku.eu/apps/user_oidc/code")
+          ensure_application "Nextcloud" "nextcloud" "$NC_PROVIDER_PK" "https://cloud.lab.tanku.eu"
+
+          # Paperless
+          PL_PROVIDER_PK=$(ensure_oidc_provider \
+            "paperless" \
+            "paperless" \
+            "https://paperless.lab.tanku.eu/accounts/oidc/kanidm/login/callback/")
+          ensure_application "Paperless" "paperless" "$PL_PROVIDER_PK" "https://paperless.lab.tanku.eu"
+
+          # Immich
+          IM_PROVIDER_PK=$(ensure_oidc_provider \
+            "immich" \
+            "immich" \
+            "https://photos.lab.tanku.eu/auth/login/callback
+app.immich:///oauth-callback")
+          ensure_application "Immich" "immich" "$IM_PROVIDER_PK" "https://photos.lab.tanku.eu"
+
+          # Matrix (if needed)
+          MX_PROVIDER_PK=$(ensure_oidc_provider \
+            "matrix" \
+            "matrix" \
+            "https://matrix.lab.tanku.eu/_synapse/client/oidc/callback")
+          ensure_application "Matrix" "matrix" "$MX_PROVIDER_PK" "https://matrix.lab.tanku.eu"
+
+          echo "=== Create ForwardAuth/Proxy Provider ==="
+          # Embedded Outpost provider for Traefik ForwardAuth
+          PROXY_PROVIDER_PK=$(ak_api GET "providers/proxy/?name=forwardauth" | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')")
+          if [ -z "$PROXY_PROVIDER_PK" ]; then
+            PROXY_PROVIDER_PK=$(ak_api POST "providers/proxy/" "{
+              \"name\": \"forwardauth\",
+              \"authorization_flow\": \"$(get_flow implicit-consent)\",
+              \"mode\": \"forward_domain\",
+              \"cookie_domain\": \"lab.tanku.eu\",
+              \"external_host\": \"https://auth.lab.tanku.eu\"
+            }" | python3 -c "import sys,json; print(json.load(sys.stdin)['pk'])")
+          fi
+          ensure_application "ForwardAuth" "forwardauth" "$PROXY_PROVIDER_PK" "https://auth.lab.tanku.eu"
+
+          # Add proxy provider to the embedded outpost
+          OUTPOST_PK=$(ak_api GET "outposts/instances/?type=proxy&managed=goauthentik.io%2Foutposts%2Fembedded" | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d['results'][0]['pk'] if d['count']>0 else '')")
+          if [ -n "$OUTPOST_PK" ]; then
+            echo "Adding ForwardAuth provider to embedded outpost..."
+            CURRENT_PROVIDERS=$(ak_api GET "outposts/instances/${OUTPOST_PK}/" | \
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d['providers']))")
+            ak_api PATCH "outposts/instances/${OUTPOST_PK}/" \
+              "{\"providers\": $(echo $CURRENT_PROVIDERS | python3 -c "import sys,json; p=json.load(sys.stdin); p.append(${PROXY_PROVIDER_PK}); print(json.dumps(list(set(p))))")}" \
+              || true
+          fi
+
+          echo "=== Store client secrets as Kubernetes secrets ==="
+          # Nextcloud
+          NC_SECRET=$(ak_api GET "providers/oauth2/${NC_PROVIDER_PK}/" | \
+            python3 -c "import sys,json; print(json.load(sys.stdin).get('client_secret',''))")
+          kubectl create namespace nextcloud 2>/dev/null || true
+          kubectl create secret generic kanidm-nextcloud-oidc \
+            --namespace nextcloud \
+            --from-literal=client-secret="${NC_SECRET}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Paperless
+          PL_SECRET=$(ak_api GET "providers/oauth2/${PL_PROVIDER_PK}/" | \
+            python3 -c "import sys,json; print(json.load(sys.stdin).get('client_secret',''))")
+          kubectl create namespace paperless 2>/dev/null || true
+          kubectl create secret generic kanidm-paperless-oidc \
+            --namespace paperless \
+            --from-literal=client-secret="${PL_SECRET}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Immich
+          IM_SECRET=$(ak_api GET "providers/oauth2/${IM_PROVIDER_PK}/" | \
+            python3 -c "import sys,json; print(json.load(sys.stdin).get('client_secret',''))")
+          kubectl create namespace immich 2>/dev/null || true
+          kubectl create secret generic kanidm-immich-oidc \
+            --namespace immich \
+            --from-literal=client-secret="${IM_SECRET}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Matrix
+          MX_SECRET=$(ak_api GET "providers/oauth2/${MX_PROVIDER_PK}/" | \
+            python3 -c "import sys,json; print(json.load(sys.stdin).get('client_secret',''))")
+          kubectl create namespace matrix 2>/dev/null || true
+          kubectl create secret generic kanidm-matrix-oidc \
+            --namespace matrix \
+            --from-literal=client-secret="${MX_SECRET}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "=== Setup complete ==="
+          echo "Next steps:"
+          echo "1. Create users in Authentik at https://auth.lab.tanku.eu"
+          echo "2. Add users to app_admins or app_users groups"
+          echo "3. Run apps-apply workflow to update OIDC configs"

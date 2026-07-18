@@ -110,43 +110,36 @@ jobs:
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ app:enable user_oidc 2>/dev/null || true
 
-            # Import Kanidm self-signed CA so Nextcloud trusts it
-            kubectl get secret kanidm-selfsigned-certificate \
-              -n kanidm -o jsonpath='{.data.ca\.crt}' | base64 -d | \
-              kubectl exec -i -n nextcloud deployment/nextcloud -- \
-                sh -c "cat > /tmp/kanidm-ca.crt && \
-                       php /var/www/html/occ security:certificates:import /tmp/kanidm-ca.crt" 2>/dev/null || true
-
             kubectl exec -n nextcloud deployment/nextcloud -- \
-              php /var/www/html/occ user_oidc:provider kanidm \
+              php /var/www/html/occ user_oidc:provider authentik \
                 --clientid="nextcloud" \
                 --clientsecret="${NEXTCLOUD_CLIENT_SECRET}" \
-                --discoveryuri="https://auth.lab.tanku.eu/oauth2/openid/nextcloud/.well-known/openid-configuration" \
-                --scope="openid email profile groups" \
+                --discoveryuri="https://auth.lab.tanku.eu/application/o/nextcloud/.well-known/openid-configuration" \
+                --scope="openid email profile" \
                 --mapping-uid="preferred_username" \
                 --mapping-display-name="name" \
                 --mapping-email="email" \
                 --mapping-groups="groups" \
                 --group-provisioning=1 \
                 --unique-uid=0 \
-                --postlogouturi="https://oauth2-proxy.lab.tanku.eu/_oauth/logout"
+                --postlogouturi="https://auth.lab.tanku.eu/application/o/nextcloud/end-session/"
 
-            # Disable local login — Kanidm only
+            # Disable local login — Authentik only
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:app:set user_oidc allow_multiple_user_backends --value="0"
 
-            # Map nextcloud-admins group to Nextcloud admin
+            # Map app_admins group to Nextcloud admin
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:app:set user_oidc admin_groups \
-                --value="nextcloud-admins@auth.lab.tanku.eu"
+                --value="app_admins"
 
-            # Allow private network for Kanidm
+            # Allow private network for Authentik
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:system:set allow_local_remote_servers --value=true --type=bool
 
             echo "OIDC configured successfully"
           else
-            echo "WARNING: Could not retrieve Kanidm client secret - run kanidm-setup workflow first"
+            echo "WARNING: Could not retrieve Authentik client secret - run authentik-setup workflow first"
           fi
 
       - name: Deploy OnlyOffice
@@ -226,7 +219,7 @@ jobs:
           if [ -n "${PAPERLESS_KANIDM_SECRET}" ]; then
             kubectl create secret generic paperless-oidc-config \
               --namespace paperless \
-              --from-literal=PAPERLESS_SOCIALACCOUNT_PROVIDERS="{\"openid_connect\":{\"APPS\":[{\"provider_id\":\"kanidm\",\"name\":\"Kanidm\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_KANIDM_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/oauth2/openid/paperless/.well-known/openid-configuration\"}}],\"OAUTH_PKCE_ENABLED\":true}}" \
+              --from-literal=PAPERLESS_SOCIALACCOUNT_PROVIDERS="{\"openid_connect\":{\"APPS\":[{\"provider_id\":\"kanidm\",\"name\":\"Authentik\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_KANIDM_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/application/o/paperless/.well-known/openid-configuration\"}}],\"OAUTH_PKCE_ENABLED\":true}}" \
               --dry-run=client -o yaml | kubectl apply -f -
           fi
 
@@ -239,6 +232,7 @@ jobs:
       - name: Deploy Immich
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
         run: |
           kubectl create namespace immich 2>/dev/null || true
           echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
@@ -282,6 +276,41 @@ jobs:
               {\"ip\": \"${TRAEFIK_IP}\", \"hostnames\": [\"auth.lab.tanku.eu\"]}
             ]}
           ]" 2>/dev/null || true
-          # NOTE: Immich OAuth is configured via the Admin UI (persisted in DB), not env vars.
-          # Settings: Administration → OAuth → issuerUrl=https://auth.lab.tanku.eu/oauth2/openid/immich
-          # clientId=immich, clientSecret from kanidm-immich-oidc secret, autoLaunch=true
+
+          # Configure Immich OAuth via API
+          IMMICH_CLIENT_SECRET=$(kubectl get secret kanidm-immich-oidc \
+            -n immich -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
+          if [ -n "${IMMICH_CLIENT_SECRET}" ]; then
+            # Wait for Immich server to be ready
+            kubectl rollout status deployment/immich-server -n immich --timeout=300s
+
+            # Get current system config and merge OAuth settings
+            CURRENT_CONFIG=$(kubectl exec -n immich deployment/immich-server -- \
+              curl -sf "http://localhost:2283/api/system-config" \
+              -H "x-api-key: ${IMMICH_API_KEY}" 2>/dev/null || echo "{}")
+
+            kubectl exec -n immich deployment/immich-server -- \
+              curl -sf -X PUT "http://localhost:2283/api/system-config" \
+              -H "x-api-key: ${IMMICH_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "$(echo "${CURRENT_CONFIG}" | python3 -c "
+import sys, json
+config = json.load(sys.stdin)
+config.setdefault('oauth', {}).update({
+    'enabled': True,
+    'issuerUrl': 'https://auth.lab.tanku.eu/application/o/immich/',
+    'clientId': 'immich',
+    'clientSecret': '${IMMICH_CLIENT_SECRET}',
+    'scope': 'openid email profile',
+    'signingAlgorithm': 'RS256',
+    'autoLaunch': True,
+    'autoRegister': True,
+    'storageLabelClaim': 'preferred_username',
+    'profileImageClaim': 'picture',
+    'logoutRedirectUri': 'https://auth.lab.tanku.eu/if/session-end/',
+})
+print(json.dumps(config))
+")" && echo "Immich OAuth configured via API" || echo "WARNING: Could not configure Immich OAuth - set IMMICH_API_KEY secret or configure manually"
+          else
+            echo "WARNING: Could not retrieve Authentik client secret for Immich - run authentik-setup workflow first"
+          fi

@@ -1,0 +1,61 @@
+authentik:
+  secret_key: "placeholder-overridden-by-env"
+  log_level: info
+  postgresql:
+    host: postgres.postgres.svc.lab.tanku.eu
+    name: authentik
+    user: authentik
+    password: "placeholder-overridden-by-env"
+  redis:
+    host: redis.redis.svc.lab.tanku.eu
+
+global:
+  env:
+    - name: AUTHENTIK_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: authentik-credentials
+          key: secret-key
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-credentials
+          key: db-password
+    - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-credentials
+          key: bootstrap-password
+    - name: AUTHENTIK_BOOTSTRAP_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: authentik-credentials
+          key: bootstrap-token
+    - name: AUTHENTIK_BOOTSTRAP_EMAIL
+      value: "admin@lab.tanku.eu"
+
+server:
+  replicas: 1
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: &host auth.lab.tanku.eu
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: authentik-tls
+        hosts:
+          - *host
+
+worker:
+  replicas: 1
+
+postgresql:
+  enabled: false
+
+redis:
+  enabled: false
