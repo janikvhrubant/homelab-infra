@@ -259,7 +259,13 @@ jobs:
             --version 0.12.0 \
             --namespace immich \
             --values apps/immich/values.yaml \
-            --timeout 15m
+            --timeout 15m || \
+          (kubectl delete deployment immich-server immich-machine-learning -n immich --ignore-not-found=true && \
+           helm upgrade --install immich immich/immich \
+             --version 0.12.0 \
+             --namespace immich \
+             --values apps/immich/values.yaml \
+             --timeout 15m)
 
           # Patch startup probe - chart ignores our initialDelaySeconds
           kubectl patch deployment immich-server -n immich --type=json -p='[
