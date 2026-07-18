@@ -24,6 +24,9 @@ authentik:
             key: bootstrap-token
       - name: AUTHENTIK_BOOTSTRAP_EMAIL
         value: "admin@lab.tanku.eu"
+      # Use Redis DB 1 to avoid conflicts with other apps (Paperless uses DB 0)
+      - name: AUTHENTIK_REDIS__DB
+        value: "1"
 
   server:
     replicas: 1
