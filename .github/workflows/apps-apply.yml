@@ -110,6 +110,10 @@ jobs:
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ app:enable user_oidc 2>/dev/null || true
 
+            # Remove legacy providers (idempotent)
+            kubectl exec -n nextcloud deployment/nextcloud -- \
+              php /var/www/html/occ user_oidc:provider:delete kanidm --force 2>/dev/null || true
+
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ user_oidc:provider authentik \
                 --clientid="nextcloud" \
