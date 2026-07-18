@@ -21,8 +21,8 @@ jobs:
       - name: Apply patches
         run: |
           cd /tmp/excalidash
-          patch -p1 < $GITHUB_WORKSPACE/apps/excalidraw/patch/backend.patch
-          patch -p1 < $GITHUB_WORKSPACE/apps/excalidraw/patch/frontend.patch
+          git apply $GITHUB_WORKSPACE/apps/excalidraw/patch/backend.patch
+          git apply $GITHUB_WORKSPACE/apps/excalidraw/patch/frontend.patch
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin

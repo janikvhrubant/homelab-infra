@@ -378,4 +378,4 @@ jobs:
           helm upgrade --install excalidash apps/excalidraw \
             --namespace excalidraw \
             --values apps/excalidraw/values.yaml \
-            --wait --timeout 5m
+            --wait --timeout 10m
