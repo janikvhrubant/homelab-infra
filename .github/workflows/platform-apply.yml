@@ -178,10 +178,15 @@ jobs:
             kubectl exec -n postgres postgres-0 -- psql -U postgres \
               -c "CREATE DATABASE authentik OWNER authentik;"
 
+          AUTHENTIK_SECRET_KEY=$(sops --decrypt platform/authentik/authentik-credentials.sops.yaml \
+            | grep 'secret-key' | awk '{print $2}' | tr -d '"')
+
           helm dependency update platform/authentik
           helm upgrade --install authentik platform/authentik \
             --namespace authentik \
             --values platform/authentik/values.yaml \
+            --set "authentik.secret_key=${AUTHENTIK_SECRET_KEY}" \
+            --set "authentik.postgresql.password=${AUTHENTIK_DB_PASS}" \
             --wait --timeout 10m
 
           kubectl apply -f platform/authentik/middleware.yaml

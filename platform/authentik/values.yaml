@@ -1,26 +1,16 @@
 authentik:
-  secret_key: "placeholder-overridden-by-env"
+  secret_key: "placeholder-set-via-helm-set"
   log_level: info
   postgresql:
     host: postgres.postgres.svc.lab.tanku.eu
     name: authentik
     user: authentik
-    password: "placeholder-overridden-by-env"
+    password: "placeholder-set-via-helm-set"
   redis:
     host: redis.redis.svc.lab.tanku.eu
 
 global:
   env:
-    - name: AUTHENTIK_SECRET_KEY
-      valueFrom:
-        secretKeyRef:
-          name: authentik-credentials
-          key: secret-key
-    - name: AUTHENTIK_POSTGRESQL__PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: authentik-credentials
-          key: db-password
     - name: AUTHENTIK_BOOTSTRAP_PASSWORD
       valueFrom:
         secretKeyRef:
