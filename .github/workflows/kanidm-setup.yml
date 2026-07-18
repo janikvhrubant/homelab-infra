@@ -83,12 +83,17 @@ jobs:
             kanidm system oauth2 create oauth2-proxy "Forward Auth Proxy" https://oauth2-proxy.lab.tanku.eu \
             --name idm_admin || true
           # traefik-forward-auth uses /_oauth as callback path (not /oauth2/callback)
+          # AUTH_HOST is unreliable — traefik sends X-Forwarded-Host of the original app,
+          # so the redirect_uri ends up as <app-host>/_oauth, not oauth2-proxy.lab.tanku.eu/_oauth
+          # Workaround: register /_oauth for every app subdomain in Kanidm
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 remove-redirect-url oauth2-proxy \
             https://oauth2-proxy.lab.tanku.eu/oauth2/callback --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 add-redirect-url oauth2-proxy \
-            https://oauth2-proxy.lab.tanku.eu/_oauth --name idm_admin || true
+          for host in oauth2-proxy.lab.tanku.eu photos.lab.tanku.eu paperless.lab.tanku.eu cloud.lab.tanku.eu; do
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 add-redirect-url oauth2-proxy \
+              https://${host}/_oauth --name idm_admin || true
+          done
 
           # Scope maps: both groups get access to all apps
           echo "=== Create scope maps ==="
