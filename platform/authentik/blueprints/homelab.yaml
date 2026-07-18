@@ -115,7 +115,7 @@ entries:
       authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
       invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
       redirect_uris:
-        - url: "https://photos.lab.tanku.eu/auth/login/callback"
+        - url: "https://photos.lab.tanku.eu/auth/login"
           matching_mode: strict
         - url: "app.immich:///oauth-callback"
           matching_mode: strict
