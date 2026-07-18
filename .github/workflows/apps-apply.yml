@@ -245,12 +245,18 @@ jobs:
           export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
           sops --decrypt apps/immich/immich-credentials.sops.yaml | kubectl apply -f -
 
+          # Deploy pgvecto-rs PostgreSQL for immich
+          kubectl apply -f apps/immich/postgres.yaml
+
+          # Wait for PostgreSQL to be ready
+          kubectl rollout status statefulset/immich-db -n immich --timeout=120s
+
           # Create PVC for immich library if not exists
           kubectl get pvc immich-library -n immich 2>/dev/null || \
             kubectl apply -f apps/immich/pvc.yaml
 
           helm upgrade --install immich immich/immich \
-            --version 0.9.3 \
+            --version 0.12.0 \
             --namespace immich \
             --values apps/immich/values.yaml \
             --timeout 15m

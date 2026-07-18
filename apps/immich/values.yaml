@@ -3,51 +3,27 @@ immich:
     library:
       existingClaim: immich-library
 
-useDeprecatedPostgresChart: true
+controllers:
+  main:
+    containers:
+      main:
+        env:
+          DB_HOSTNAME: "immich-db"
+          DB_DATABASE_NAME: "immich"
+          DB_USERNAME: "immich"
+          DB_PASSWORD:
+            valueFrom:
+              secretKeyRef:
+                name: immich-credentials
+                key: db-password
+          REDIS_HOSTNAME: "redis.redis.svc.lab.tanku.eu"
+          REDIS_PORT: "6379"
+          IMMICH_MACHINE_LEARNING_URL: "http://immich-machine-learning:3003"
 
-env:
-  DB_HOSTNAME: "immich-postgresql"
-  DB_DATABASE_NAME: "immich"
-  DB_USERNAME: "immich"
-  DB_PASSWORD:
-    valueFrom:
-      secretKeyRef:
-        name: immich-credentials
-        key: db-password
-  REDIS_HOSTNAME: "redis.redis.svc.lab.tanku.eu"
-  REDIS_PORT: "6379"
-
-postgresql:
-  enabled: true
-  global:
-    postgresql:
-      auth:
-        username: immich
-        database: immich
-        existingSecret: immich-credentials
-        secretKeys:
-          adminPasswordKey: db-password
-          userPasswordKey: db-password
-  image:
-    repository: tensorchord/pgvecto-rs
-    tag: pg14-v0.2.0
-  primary:
-    initdb:
-      scripts:
-        create-extensions.sql: |
-          CREATE EXTENSION IF NOT EXISTS vectors;
-          CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
-    persistence:
-      size: 10Gi
-
-redis:
+valkey:
   enabled: false
 
 server:
-  startupProbe:
-    initialDelaySeconds: 60
-    failureThreshold: 60
-    periodSeconds: 10
   ingress:
     main:
       enabled: true
