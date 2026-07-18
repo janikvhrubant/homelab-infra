@@ -1,0 +1,38 @@
+--- a/frontend/src/api/auth.ts
++++ b/frontend/src/api/auth.ts
+@@ -136,8 +136,9 @@
+   await api.post<{ ok?: boolean }>("/auth/refresh", {});
+ };
+ 
+-export const authLogout = async (): Promise<void> => {
+-  await api.post("/auth/logout");
++export const authLogout = async (): Promise<{ ok: boolean; oidcEndSessionUrl?: string }> => {
++  const res = await api.post<{ ok: boolean; oidcEndSessionUrl?: string }>("/auth/logout");
++  return res.data;
+ };
+ 
+ export const authLogin = async (
+--- a/frontend/src/context/AuthContext.tsx
++++ b/frontend/src/context/AuthContext.tsx
+@@ -243,12 +243,17 @@
+   };
+ 
+   const logout = () => {
+-    void authLogout().catch(() => undefined);
+     localStorage.removeItem(USER_KEY);
+     setUser(null);
+-    setTimeout(() => {
+-      navigate('/login');
+-    }, 0);
++    authLogout()
++      .then((data) => {
++        if (data?.oidcEndSessionUrl) {
++          window.location.href = data.oidcEndSessionUrl;
++        } else {
++          navigate('/login');
++        }
++      })
++      .catch(() => navigate('/login'));
+   };
+ 
+   return (

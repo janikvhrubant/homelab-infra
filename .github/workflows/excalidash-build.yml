@@ -1,0 +1,44 @@
+name: Build ExcaliDash Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/excalidraw/patch/**'
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone ExcaliDash upstream
+        run: |
+          rm -rf /tmp/excalidash
+          git clone https://github.com/ZimengXiong/ExcaliDash /tmp/excalidash
+
+      - name: Apply patches
+        run: |
+          cd /tmp/excalidash
+          patch -p1 < $GITHUB_WORKSPACE/apps/excalidraw/patch/backend.patch
+          patch -p1 < $GITHUB_WORKSPACE/apps/excalidraw/patch/frontend.patch
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push backend image
+        run: |
+          docker build \
+            -f /tmp/excalidash/backend/Dockerfile \
+            -t ghcr.io/janikvhrubant/excalidash-backend:latest \
+            /tmp/excalidash/backend
+          docker push ghcr.io/janikvhrubant/excalidash-backend:latest
+
+      - name: Build and push frontend image
+        run: |
+          docker build \
+            -f /tmp/excalidash/frontend/Dockerfile \
+            -t ghcr.io/janikvhrubant/excalidash-frontend:latest \
+            /tmp/excalidash
+          docker push ghcr.io/janikvhrubant/excalidash-frontend:latest

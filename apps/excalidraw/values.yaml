@@ -4,7 +4,7 @@ app-template:
       containers:
         backend:
           image:
-            repository: docker.io/zimengxiong/excalidash-backend
+            repository: ghcr.io/janikvhrubant/excalidash-backend
             tag: latest
           envFrom:
             - secretRef:
@@ -14,7 +14,7 @@ app-template:
               protocol: TCP
         main:
           image:
-            repository: docker.io/zimengxiong/excalidash-frontend
+            repository: ghcr.io/janikvhrubant/excalidash-frontend
             tag: latest
           env:
             BACKEND_URL: localhost:8000
