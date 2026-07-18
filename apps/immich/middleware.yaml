@@ -1,0 +1,10 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-login
+  namespace: immich
+spec:
+  redirectRegex:
+    regex: "^https://photos.lab.tanku.eu/auth/login.*"
+    replacement: "https://photos.lab.tanku.eu/"
+    permanent: false

@@ -129,7 +129,7 @@ jobs:
                 --mapping-groups="groups" \
                 --group-provisioning=1 \
                 --unique-uid=0 \
-                --postlogouturi="https://home.lab.tanku.eu"
+                --postlogouturi="https://oauth2-proxy.lab.tanku.eu/_oauth/logout"
 
             # Disable local login — Kanidm only
             kubectl exec -n nextcloud deployment/nextcloud -- \
@@ -272,6 +272,8 @@ jobs:
             {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/initialDelaySeconds","value":60},
             {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/failureThreshold","value":60}
           ]' 2>/dev/null || true
+
+          kubectl apply -f apps/immich/middleware.yaml
 
           # Add hostAliases for internal DNS resolution
           TRAEFIK_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')

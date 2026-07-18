@@ -28,7 +28,7 @@ nextcloud:
           'trusted_proxies' => array('10.0.0.0/8', '10.244.0.0/16'),
           'forwarded_for_headers' => array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'),
           'allow_local_remote_servers' => true,
-          'logout_url' => 'https://oauth2-proxy.lab.tanku.eu/oauth2/sign_out?rd=https://auth.lab.tanku.eu/ui/logout',
+          'logout_url' => 'https://oauth2-proxy.lab.tanku.eu/_oauth/logout',
           'cors.allowed-domains' => array('https://office.lab.tanku.eu', 'https://cloud.lab.tanku.eu'),
           'trusted_domains' => array('localhost', 'cloud.lab.tanku.eu', 'office.lab.tanku.eu'),
         );
