@@ -293,24 +293,8 @@ jobs:
               curl -sf -X PUT "http://localhost:2283/api/system-config" \
               -H "x-api-key: ${IMMICH_API_KEY}" \
               -H "Content-Type: application/json" \
-              -d "$(echo "${CURRENT_CONFIG}" | python3 -c "
-import sys, json
-config = json.load(sys.stdin)
-config.setdefault('oauth', {}).update({
-    'enabled': True,
-    'issuerUrl': 'https://auth.lab.tanku.eu/application/o/immich/',
-    'clientId': 'immich',
-    'clientSecret': '${IMMICH_CLIENT_SECRET}',
-    'scope': 'openid email profile',
-    'signingAlgorithm': 'RS256',
-    'autoLaunch': True,
-    'autoRegister': True,
-    'storageLabelClaim': 'preferred_username',
-    'profileImageClaim': 'picture',
-    'logoutRedirectUri': 'https://auth.lab.tanku.eu/if/session-end/',
-})
-print(json.dumps(config))
-")" && echo "Immich OAuth configured via API" || echo "WARNING: Could not configure Immich OAuth - set IMMICH_API_KEY secret or configure manually"
+              -d "$(echo "${CURRENT_CONFIG}" | python3 -c 'import sys,json; c=json.load(sys.stdin); c.setdefault("oauth",{}).update({"enabled":True,"issuerUrl":"https://auth.lab.tanku.eu/application/o/immich/","clientId":"immich","clientSecret":"'"${IMMICH_CLIENT_SECRET}"'","scope":"openid email profile","signingAlgorithm":"RS256","autoLaunch":True,"autoRegister":True,"storageLabelClaim":"preferred_username","profileImageClaim":"picture","logoutRedirectUri":"https://auth.lab.tanku.eu/if/session-end/"}); print(json.dumps(c))')" \
+              && echo "Immich OAuth configured via API" || echo "WARNING: Could not configure Immich OAuth"
           else
             echo "WARNING: Could not retrieve Authentik client secret for Immich - run authentik-setup workflow first"
           fi
