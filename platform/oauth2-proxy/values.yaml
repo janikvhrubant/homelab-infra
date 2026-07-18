@@ -4,39 +4,26 @@ app-template:
       containers:
         main:
           image:
-            repository: quay.io/oauth2-proxy/oauth2-proxy
-            tag: "v7.7.1"
-          args:
-            - --provider=oidc
-            - --oidc-issuer-url=https://auth.lab.tanku.eu/oauth2/openid/oauth2-proxy
-            - --client-id=oauth2-proxy
-            - --redirect-url=https://oauth2-proxy.lab.tanku.eu/oauth2/callback
-            - --upstream=static://202
-            - --http-address=0.0.0.0:4180
-            - --email-domain=*
-            - --scope=openid profile email groups
-            - --cookie-secure=true
-            - --cookie-domain=.lab.tanku.eu
-            - --whitelist-domain=.lab.tanku.eu
-            - --cookie-samesite=lax
-            - --cookie-name=_oauth2_proxy
-            - --skip-provider-button=true
-            - --pass-access-token=false
-            - --set-xauthrequest=true
-            - --ssl-insecure-skip-verify=true
-            - --reverse-proxy=true
-            - --real-client-ip-header=X-Forwarded-For
+            repository: thomseddon/traefik-forward-auth
+            tag: "2"
           env:
-            OAUTH2_PROXY_CLIENT_SECRET:
+            DEFAULT_PROVIDER: oidc
+            PROVIDERS_OIDC_ISSUER_URL: "https://auth.lab.tanku.eu/oauth2/openid/oauth2-proxy"
+            PROVIDERS_OIDC_CLIENT_ID: "oauth2-proxy"
+            PROVIDERS_OIDC_CLIENT_SECRET:
               valueFrom:
                 secretKeyRef:
                   name: oauth2-proxy-credentials
                   key: client-secret
-            OAUTH2_PROXY_COOKIE_SECRET:
+            SECRET:
               valueFrom:
                 secretKeyRef:
                   name: oauth2-proxy-credentials
                   key: cookie-secret
+            AUTH_HOST: "oauth2-proxy.lab.tanku.eu"
+            COOKIE_DOMAIN: ".lab.tanku.eu"
+            SCOPE: "openid profile email groups"
+            INSECURE_COOKIE: "false"
       pod:
         hostAliases:
           - ip: "10.97.114.105"
@@ -47,7 +34,7 @@ app-template:
     main:
       ports:
         http:
-          port: 4180
+          port: 4181
 
   ingress:
     main:
@@ -58,7 +45,7 @@ app-template:
       hosts:
         - host: &host oauth2-proxy.lab.tanku.eu
           paths:
-            - path: /oauth2
+            - path: /_oauth
               pathType: Prefix
               service:
                 name: main

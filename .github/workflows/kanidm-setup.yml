@@ -93,7 +93,10 @@ jobs:
           done
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 add-redirect-url oauth2-proxy \
-            https://oauth2-proxy.lab.tanku.eu/oauth2/callback --name idm_admin || true
+            https://oauth2-proxy.lab.tanku.eu/_oauth --name idm_admin || true
+          # traefik-forward-auth only supports RS256 — enable legacy crypto on Kanidm client
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 warning-enable-legacy-crypto oauth2-proxy --name idm_admin || true
 
           # Scope maps: both groups get access to all apps
           echo "=== Create scope maps ==="

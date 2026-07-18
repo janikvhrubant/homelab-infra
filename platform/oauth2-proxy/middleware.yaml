@@ -5,25 +5,7 @@ metadata:
   namespace: oauth2-proxy
 spec:
   forwardAuth:
-    address: http://oauth2-proxy.oauth2-proxy.svc.lab.tanku.eu:4180/oauth2/auth
+    address: http://oauth2-proxy.oauth2-proxy.svc.lab.tanku.eu:4181
     authResponseHeaders:
-      - X-Auth-Request-User
-      - X-Auth-Request-Email
+      - X-Forwarded-User
     trustForwardHeader: true
----
-# oauth2-proxy returns 401 for unauthenticated requests (not 302).
-# Traefik's errors middleware catches the 401 and serves the oauth2-proxy sign-in page,
-# which then redirects the browser to Kanidm.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: errors-kanidm
-  namespace: oauth2-proxy
-spec:
-  errors:
-    status:
-      - "401"
-    service:
-      name: oauth2-proxy
-      port: 4180
-    query: /oauth2/sign_in?rd={url}
