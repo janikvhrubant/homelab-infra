@@ -3,6 +3,8 @@ immich:
     library:
       existingClaim: immich-library
 
+useDeprecatedPostgresChart: true
+
 env:
   DB_HOSTNAME: "immich-postgresql"
   DB_DATABASE_NAME: "immich"
@@ -17,7 +19,6 @@ env:
 
 postgresql:
   enabled: true
-  useDeprecatedPostgresChart: true
   global:
     postgresql:
       auth:
