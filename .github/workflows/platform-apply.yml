@@ -178,3 +178,13 @@ jobs:
           done
           kubectl delete order -n kanidm --all 2>/dev/null || true
           kubectl delete certificaterequest -n kanidm --all 2>/dev/null || true
+
+      - name: Install oauth2-proxy
+        run: |
+          kubectl create namespace oauth2-proxy 2>/dev/null || true
+          helm dependency update platform/oauth2-proxy
+          helm upgrade --install oauth2-proxy platform/oauth2-proxy \
+            --namespace oauth2-proxy \
+            --values platform/oauth2-proxy/values.yaml \
+            --wait
+          kubectl apply -f platform/oauth2-proxy/middleware.yaml

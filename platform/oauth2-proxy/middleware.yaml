@@ -1,0 +1,11 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: forwardauth-kanidm
+  namespace: oauth2-proxy
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy.oauth2-proxy.svc.lab.tanku.eu:4181
+    authResponseHeaders:
+      - X-Forwarded-User
+    trustForwardHeader: true

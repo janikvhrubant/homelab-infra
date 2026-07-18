@@ -41,14 +41,8 @@ jobs:
         env:
           ADMIN_PASS: ${{ inputs.admin_password }}
         run: |
-          # Find the kanidm service
-          echo "=== Kanidm services ==="
-          kubectl get svc -n kanidm
-
-          # Cleanup any existing client pod
           kubectl delete pod kanidm-client -n kanidm --ignore-not-found=true
 
-          # Start temporary kanidm client pod
           kubectl run kanidm-client \
             --image=docker.io/kanidm/tools:1.3.3 \
             --restart=Never \
@@ -58,72 +52,67 @@ jobs:
           kubectl wait --for=condition=ready pod/kanidm-client \
             -n kanidm --timeout=60s
 
-          # Get kanidm service IP
           KANIDM_IP=$(kubectl get svc kanidm -n kanidm -o jsonpath='{.spec.clusterIP}')
-          echo "Kanidm IP: ${KANIDM_IP}"
 
-          # Write config file
           kubectl exec -n kanidm kanidm-client -- mkdir -p /root/.config
           kubectl exec -n kanidm kanidm-client -- sh -c "printf 'uri = \"https://${KANIDM_IP}:443\"\nverify_ca = false\nverify_hostnames = false\n' > /root/.config/kanidm"
 
-          # Login
-          echo "=== Login ==="
           kubectl exec -n kanidm kanidm-client -- \
             kanidm login --name idm_admin --password "${ADMIN_PASS}"
 
-          # Create person
-          echo "=== Create persons ==="
-          kubectl exec -n kanidm kanidm-client -- kanidm person create janik 'Janik Hrubant' --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- kanidm person create app_admin 'App Admin' --name idm_admin || true
+          # Groups: app_admins for admins, app_users for regular users (mutually exclusive)
+          echo "=== Create groups ==="
+          kubectl exec -n kanidm kanidm-client -- kanidm group create app_admins --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- kanidm group create app_users --name idm_admin || true
 
-          # Create OIDC clients (idempotent - || true)
-          echo "=== Create OIDC clients ==="
+          # OAuth2 clients
+          echo "=== Create OAuth2 clients ==="
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 create nextcloud nextcloud https://cloud.lab.tanku.eu \
             --name idm_admin || true
-          for app in paperless immich matrix; do
-            kubectl exec -n kanidm kanidm-client -- \
-              kanidm system oauth2 create $app $app https://${app}.lab.tanku.eu \
-              --name idm_admin || true
-          done
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create paperless paperless https://paperless.lab.tanku.eu \
+            --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create immich immich https://photos.lab.tanku.eu \
+            --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create matrix matrix https://matrix.lab.tanku.eu \
+            --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 create oauth2-proxy "Forward Auth Proxy" https://oauth2-proxy.lab.tanku.eu \
+            --name idm_admin || true
+          # traefik-forward-auth uses /_oauth as callback path (not /oauth2/callback)
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 remove-redirect-url oauth2-proxy \
+            https://oauth2-proxy.lab.tanku.eu/oauth2/callback --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 add-redirect-url oauth2-proxy \
+            https://oauth2-proxy.lab.tanku.eu/_oauth --name idm_admin || true
 
-          # Create groups and assign members
-          echo "=== Create groups ==="
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm group create lab-users --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm group add-members lab-users janik app_admin --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm group create app-admins --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm group add-members app-admins app_admin --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm group create nextcloud-admins --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm group add-members nextcloud-admins app_admin --name idm_admin || true
-
-          # Create scope maps
+          # Scope maps: both groups get access to all apps
           echo "=== Create scope maps ==="
-          for app in paperless immich matrix; do
+          for app in paperless immich matrix nextcloud oauth2-proxy; do
             kubectl exec -n kanidm kanidm-client -- \
-              kanidm system oauth2 create-scope-map $app lab-users openid profile email \
+              kanidm system oauth2 create-scope-map $app app_admins openid profile email groups \
               --name idm_admin || true
             kubectl exec -n kanidm kanidm-client -- \
-              kanidm system oauth2 create-scope-map $app app-admins openid profile email groups \
+              kanidm system oauth2 create-scope-map $app app_users openid profile email groups \
               --name idm_admin || true
           done
-          # nextcloud gets groups scope for admin mapping
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 create-scope-map nextcloud lab-users openid profile email groups \
-            --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 create-scope-map nextcloud nextcloud-admins openid profile email groups \
-            --name idm_admin || true
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 create-scope-map nextcloud app-admins openid profile email groups \
-            --name idm_admin || true
 
-          # Nextcloud-specific OAuth2 settings
+          # Claim maps: groups claim returns group name
+          echo "=== Create claim maps ==="
+          for app in paperless immich matrix nextcloud oauth2-proxy; do
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 create-claim-map $app groups app_admins app_admins \
+              --name idm_admin || true
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 create-claim-map $app groups app_users app_users \
+              --name idm_admin || true
+          done
+
+          # Nextcloud-specific settings
           echo "=== Nextcloud OAuth2 settings ==="
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 prefer-short-username nextcloud --name idm_admin || true
@@ -132,8 +121,11 @@ jobs:
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 add-redirect-url nextcloud \
             https://cloud.lab.tanku.eu/apps/user_oidc/code --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 set-landing-url nextcloud https://cloud.lab.tanku.eu \
+            --name idm_admin || true
 
-          # Paperless-specific OAuth2 settings
+          # Paperless-specific settings
           echo "=== Paperless OAuth2 settings ==="
           kubectl exec -n kanidm kanidm-client -- \
             kanidm system oauth2 prefer-short-username paperless --name idm_admin || true
@@ -143,33 +135,77 @@ jobs:
             kanidm system oauth2 add-redirect-url paperless \
             https://paperless.lab.tanku.eu/accounts/oidc/kanidm/login/callback/ --name idm_admin || true
 
-          # Fix nextcloud landing URL
-          echo "=== Fix nextcloud landing URL ==="
+          # Immich-specific settings
+          echo "=== Immich OAuth2 settings ==="
           kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 set-landing-url nextcloud https://cloud.lab.tanku.eu \
+            kanidm system oauth2 prefer-short-username immich --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 disable-consent-prompt immich --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 add-redirect-url immich \
+            https://photos.lab.tanku.eu/auth/login --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 set-landing-url immich https://photos.lab.tanku.eu \
             --name idm_admin || true
 
-          echo "=== OAuth2 list ==="
-          kubectl exec -n kanidm kanidm-client -- kanidm system oauth2 list --name idm_admin || true
+          # oauth2-proxy-specific settings
+          # traefik-forward-auth doesn't support PKCE — must be disabled on the Kanidm client
+          echo "=== oauth2-proxy settings ==="
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 prefer-short-username oauth2-proxy --name idm_admin || true
+          kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 disable-consent-prompt oauth2-proxy --name idm_admin || true
+          # Disable PKCE enforcement (traefik-forward-auth doesn't support PKCE)
+          # Requires REST API PATCH since there's no CLI command
+          KANIDM_IP=$(kubectl get svc kanidm -n kanidm -o jsonpath='{.spec.clusterIP}')
+          kubectl exec -n kanidm kanidm-client -- python3 -c "
+import urllib.request, json, ssl, os
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+base = 'https://${KANIDM_IP}:443'
+# Login
+req = urllib.request.Request(base + '/v1/auth', method='POST',
+    data=json.dumps({'step': {'init': {'username': 'idm_admin', 'issue': 'token'}}}).encode(),
+    headers={'Content-Type': 'application/json'})
+with urllib.request.urlopen(req, context=ctx) as r:
+    sid = json.loads(r.read())['sessionid']
+req = urllib.request.Request(base + '/v1/auth', method='POST',
+    data=json.dumps({'step': {'begin': {'mech': 'password'}}}).encode(),
+    headers={'Content-Type': 'application/json', 'X-KANIDM-AUTH-SESSION-ID': sid})
+with urllib.request.urlopen(req, context=ctx) as r: pass
+req = urllib.request.Request(base + '/v1/auth', method='POST',
+    data=json.dumps({'step': {'cred': {'password': '${ADMIN_PASS}'}}}).encode(),
+    headers={'Content-Type': 'application/json', 'X-KANIDM-AUTH-SESSION-ID': sid})
+with urllib.request.urlopen(req, context=ctx) as r:
+    token = json.loads(r.read())['token']
+# PATCH oauth2-proxy to disable PKCE
+req = urllib.request.Request(base + '/v1/oauth2/oauth2-proxy', method='PATCH',
+    data=json.dumps([{'attr': 'oauth2_allow_insecure_client_disable_pkce', 'values': ['true']}]).encode(),
+    headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})
+with urllib.request.urlopen(req, context=ctx) as r:
+    print('PKCE disabled for oauth2-proxy, status:', r.status)
+"
 
-          # Store nextcloud client secret as Kubernetes secret for apps-apply
-          echo "=== Store nextcloud client secret ==="
-          NEXTCLOUD_SECRET=$(kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 show-basic-secret nextcloud --name idm_admin)
-          kubectl create namespace nextcloud 2>/dev/null || true
-          kubectl create secret generic kanidm-nextcloud-oidc \
-            --namespace nextcloud \
-            --from-literal=client-secret="${NEXTCLOUD_SECRET}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          # Store paperless client secret
-          echo "=== Store paperless client secret ==="
-          PAPERLESS_SECRET=$(kubectl exec -n kanidm kanidm-client -- \
-            kanidm system oauth2 show-basic-secret paperless --name idm_admin)
-          kubectl create namespace paperless 2>/dev/null || true
-          kubectl create secret generic kanidm-paperless-oidc \
-            --namespace paperless \
-            --from-literal=client-secret="${PAPERLESS_SECRET}" \
+          # Store client secrets as Kubernetes secrets for use by app deployments
+          echo "=== Store client secrets ==="
+          for app in nextcloud paperless immich; do
+            SECRET=$(kubectl exec -n kanidm kanidm-client -- \
+              kanidm system oauth2 show-basic-secret $app --name idm_admin)
+            kubectl create namespace $app 2>/dev/null || true
+            kubectl create secret generic kanidm-${app}-oidc \
+              --namespace $app \
+              --from-literal=client-secret="${SECRET}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          done
+          # oauth2-proxy secret (stored in oauth2-proxy namespace)
+          SECRET=$(kubectl exec -n kanidm kanidm-client -- \
+            kanidm system oauth2 show-basic-secret oauth2-proxy --name idm_admin)
+          kubectl create namespace oauth2-proxy 2>/dev/null || true
+          kubectl create secret generic oauth2-proxy-credentials \
+            --namespace oauth2-proxy \
+            --from-literal=client-secret="${SECRET}" \
+            --from-literal=cookie-secret="$(openssl rand -base64 32 | tr -- '+/' '-_' | tr -d '=')" \
             --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl delete pod kanidm-client -n kanidm
@@ -189,12 +225,12 @@ jobs:
           kubectl exec -n kanidm kanidm-client -- \
             kanidm login --name idm_admin --password "${{ inputs.admin_password }}"
 
-          echo "=== Reset token for janik ==="
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm person credential create-reset-token janik --name idm_admin
-
-          echo "=== Reset token for app_admin ==="
-          kubectl exec -n kanidm kanidm-client -- \
-            kanidm person credential create-reset-token app_admin --name idm_admin
+          # Reset tokens are generated per-user and not stored in the repo
+          # Pass usernames as space-separated input or hardcode for known service accounts
+          for user in app_admin; do
+            echo "=== Reset token for ${user} ==="
+            kubectl exec -n kanidm kanidm-client -- \
+              kanidm person credential create-reset-token $user --name idm_admin
+          done
 
           kubectl delete pod kanidm-client -n kanidm

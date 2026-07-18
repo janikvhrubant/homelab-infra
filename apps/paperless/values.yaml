@@ -29,6 +29,7 @@ app-template:
             PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
             PAPERLESS_DISABLE_REGULAR_LOGIN: "false"
             PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL: "https"
+            PAPERLESS_LOGOUT_REDIRECT_URL: "https://oauth2-proxy.lab.tanku.eu/oauth2/sign_out?rd=https://auth.lab.tanku.eu/ui/logout"
           envFrom:
             - secretRef:
                 name: paperless-oidc-config
@@ -44,6 +45,90 @@ app-template:
               - path: /usr/src/paperless/media
                 subPath: media
 
+  configMaps:
+    adapter:
+      enabled: true
+      data:
+        adapter.py: |
+          from urllib.parse import quote
+
+          from allauth.account.adapter import DefaultAccountAdapter
+          from allauth.core import context
+          from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+          from django.conf import settings
+          from django.forms import ValidationError
+          from django.urls import reverse
+
+
+          class CustomAccountAdapter(DefaultAccountAdapter):
+              def is_open_for_signup(self, request):
+                  allow_signups = super().is_open_for_signup(request)
+                  return getattr(settings, "ACCOUNT_ALLOW_SIGNUPS", allow_signups)
+
+              def pre_authenticate(self, request, **credentials):
+                  if settings.DISABLE_REGULAR_LOGIN:
+                      raise ValidationError("Regular login is disabled")
+                  return super().pre_authenticate(request, **credentials)
+
+              def is_safe_url(self, url):
+                  from django.utils.http import url_has_allowed_host_and_scheme
+                  allowed_hosts = {context.request.get_host()} | set(settings.ALLOWED_HOSTS)
+                  if "*" in allowed_hosts:
+                      allowed_hosts.remove("*")
+                      allowed_hosts.add(context.request.get_host())
+                      return url_has_allowed_host_and_scheme(url, allowed_hosts=allowed_hosts)
+                  return url_has_allowed_host_and_scheme(url, allowed_hosts=allowed_hosts)
+
+              def get_reset_password_from_key_url(self, key):
+                  if settings.PAPERLESS_URL is None:
+                      return super().get_reset_password_from_key_url(key)
+                  else:
+                      path = reverse(
+                          "account_reset_password_from_key",
+                          kwargs={"uidb36": "UID", "key": "KEY"},
+                      )
+                      path = path.replace("UID-KEY", quote(key))
+                      return settings.PAPERLESS_URL + path
+
+
+          class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
+              def is_open_for_signup(self, request, sociallogin):
+                  allow_signups = super().is_open_for_signup(request, sociallogin)
+                  return getattr(settings, "SOCIALACCOUNT_ALLOW_SIGNUPS", allow_signups)
+
+              def get_connect_redirect_url(self, request, socialaccount):
+                  return reverse("base")
+
+              def populate_user(self, request, sociallogin, data):
+                  user = super().populate_user(request, sociallogin, data)
+                  self._apply_group_permissions(user, sociallogin)
+                  return user
+
+              def save_user(self, request, sociallogin, form=None):
+                  user = super().save_user(request, sociallogin, form)
+                  self._apply_group_permissions(user, sociallogin)
+                  user.save()
+                  return user
+
+              def _apply_group_permissions(self, user, sociallogin):
+                  groups = sociallogin.account.extra_data.get("groups", [])
+                  if isinstance(groups, str):
+                      groups = [groups]
+                  is_admin = "app_admins" in groups
+                  is_user = "app_users" in groups
+                  user.is_active = is_admin or is_user
+                  user.is_staff = is_admin or is_user
+                  user.is_superuser = is_admin
+
+  persistence:
+    adapter:
+      enabled: true
+      type: configMap
+      name: paperless-adapter
+      globalMounts:
+        - path: /usr/src/paperless/src/paperless/adapter.py
+          subPath: adapter.py
+
   service:
     main:
       ports:
@@ -57,6 +142,7 @@ app-template:
       className: traefik
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
+        traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-forwardauth-kanidm@kubernetescrd
       hosts:
         - host: &host paperless.lab.tanku.eu
           paths:

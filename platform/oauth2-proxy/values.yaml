@@ -1,0 +1,56 @@
+app-template:
+  controllers:
+    main:
+      containers:
+        main:
+          image:
+            repository: thomseddon/traefik-forward-auth
+            tag: "2"
+          env:
+            DEFAULT_PROVIDER: oidc
+            PROVIDERS_OIDC_ISSUER_URL: "https://auth.lab.tanku.eu/oauth2/openid/oauth2-proxy"
+            PROVIDERS_OIDC_CLIENT_ID: "oauth2-proxy"
+            PROVIDERS_OIDC_CLIENT_SECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-credentials
+                  key: client-secret
+            SECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-credentials
+                  key: cookie-secret
+            AUTH_HOST: "oauth2-proxy.lab.tanku.eu"
+            COOKIE_DOMAIN: ".lab.tanku.eu"
+            SCOPE: "openid profile email groups"
+            INSECURE_COOKIE: "false"
+      pod:
+        hostAliases:
+          - ip: "10.97.114.105"
+            hostnames:
+              - auth.lab.tanku.eu
+
+  service:
+    main:
+      ports:
+        http:
+          port: 4181
+
+  ingress:
+    main:
+      enabled: true
+      className: traefik
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      hosts:
+        - host: &host oauth2-proxy.lab.tanku.eu
+          paths:
+            - path: /_oauth
+              pathType: Prefix
+              service:
+                name: main
+                port: http
+      tls:
+        - secretName: oauth2-proxy-tls
+          hosts:
+            - *host
