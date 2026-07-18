@@ -28,10 +28,11 @@ app-template:
             PAPERLESS_ADMIN_MAIL: "admin@lab.tanku.eu"
             PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
             PAPERLESS_DISABLE_REGULAR_LOGIN: "true"
-            PAPERLESS_SOCIALACCOUNT_AUTO_LOGIN: "true"
-            PAPERLESS_SOCIALACCOUNT_AUTO_SIGNUP: "true"
+            PAPERLESS_REDIRECT_LOGIN_TO_SSO: "true"
+            PAPERLESS_SOCIAL_AUTO_SIGNUP: "true"
+            PAPERLESS_SOCIALACCOUNT_ALLOW_SIGNUPS: "true"
             PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL: "https"
-            PAPERLESS_LOGOUT_REDIRECT_URL: "https://auth.lab.tanku.eu/if/session-end/"
+            PAPERLESS_LOGOUT_REDIRECT_URL: "https://auth.lab.tanku.eu/application/o/paperless/end-session/"
           envFrom:
             - secretRef:
                 name: paperless-oidc-config
