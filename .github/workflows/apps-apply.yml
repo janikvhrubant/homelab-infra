@@ -275,8 +275,6 @@ jobs:
             {"op":"replace","path":"/spec/template/spec/containers/0/startupProbe/failureThreshold","value":60}
           ]' 2>/dev/null || true
 
-          kubectl apply -f apps/immich/middleware.yaml
-
           # Add hostAliases for internal DNS resolution
           TRAEFIK_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
           kubectl patch deployment immich-server -n immich --type=json -p="[
@@ -301,8 +299,53 @@ jobs:
               curl -sf -X PUT "http://localhost:2283/api/system-config" \
               -H "x-api-key: ${IMMICH_API_KEY}" \
               -H "Content-Type: application/json" \
-              -d "$(echo "${CURRENT_CONFIG}" | python3 -c 'import sys,json; c=json.load(sys.stdin); c.setdefault("oauth",{}).update({"enabled":True,"issuerUrl":"https://auth.lab.tanku.eu/application/o/immich/","clientId":"immich","clientSecret":"'"${IMMICH_CLIENT_SECRET}"'","scope":"openid email profile","signingAlgorithm":"RS256","autoLaunch":True,"autoRegister":True,"storageLabelClaim":"preferred_username","profileImageClaim":"picture","logoutRedirectUri":"https://auth.lab.tanku.eu/if/session-end/"}); print(json.dumps(c))')" \
+              -d "$(echo "${CURRENT_CONFIG}" | python3 -c 'import sys,json; c=json.load(sys.stdin); c.setdefault("oauth",{}).update({"enabled":True,"issuerUrl":"https://auth.lab.tanku.eu/application/o/immich/","clientId":"immich","clientSecret":"'"${IMMICH_CLIENT_SECRET}"'","scope":"openid email profile","signingAlgorithm":"RS256","autoLaunch":True,"autoRegister":True,"buttonText":"Login with Authentik","storageLabelClaim":"preferred_username","profileImageClaim":"picture","logoutRedirectUri":"https://auth.lab.tanku.eu/if/session-end/"}); c["passwordLogin"]={"enabled":False}; print(json.dumps(c))')" \
               && echo "Immich OAuth configured via API" || echo "WARNING: Could not configure Immich OAuth"
           else
             echo "WARNING: Could not retrieve Authentik client secret for Immich - run authentik-setup workflow first"
           fi
+
+      - name: Deploy ExcaliDash
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          kubectl create namespace excalidraw 2>/dev/null || true
+          echo "$SOPS_AGE_KEY" > /tmp/age-key.txt
+          export SOPS_AGE_KEY_FILE=/tmp/age-key.txt
+
+          # Deploy static credentials
+          sops --decrypt apps/excalidraw/excalidraw-credentials.sops.yaml | kubectl apply -f -
+
+          # Build combined config secret (static + OIDC)
+          OIDC_SECRET=$(kubectl get secret authentik-excalidash-oidc \
+            -n excalidraw -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
+          JWT_SECRET=$(sops --decrypt apps/excalidraw/excalidraw-credentials.sops.yaml \
+            | grep 'JWT_SECRET' | awk '{print $2}' | tr -d '"')
+          CSRF_SECRET=$(sops --decrypt apps/excalidraw/excalidraw-credentials.sops.yaml \
+            | grep 'CSRF_SECRET' | awk '{print $2}' | tr -d '"')
+          PEPPER=$(sops --decrypt apps/excalidraw/excalidraw-credentials.sops.yaml \
+            | grep 'API_KEY_HASH_PEPPER' | awk '{print $2}' | tr -d '"')
+
+          kubectl create secret generic excalidash-config \
+            --namespace excalidraw \
+            --from-literal=AUTH_MODE=oidc_enforced \
+            --from-literal=FRONTEND_URL=https://draw.lab.tanku.eu \
+            --from-literal=TRUST_PROXY=1 \
+            --from-literal=OIDC_PROVIDER_NAME=authentik \
+            --from-literal=OIDC_ISSUER_URL=https://auth.lab.tanku.eu/application/o/excalidash/ \
+            --from-literal=OIDC_CLIENT_ID=excalidash \
+            --from-literal=OIDC_CLIENT_SECRET="${OIDC_SECRET}" \
+            --from-literal=OIDC_REDIRECT_URI=https://draw.lab.tanku.eu/api/auth/oidc/callback \
+            --from-literal=OIDC_ADMIN_GROUPS=app_admins \
+            --from-literal=OIDC_REQUIRE_EMAIL_VERIFIED=false \
+            --from-literal=JWT_SECRET="${JWT_SECRET}" \
+            --from-literal=CSRF_SECRET="${CSRF_SECRET}" \
+            --from-literal=API_KEY_HASH_PEPPER="${PEPPER}" \
+            --from-literal=UPDATE_CHECK_OUTBOUND=false \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          helm dependency update apps/excalidraw
+          helm upgrade --install excalidash apps/excalidraw \
+            --namespace excalidraw \
+            --values apps/excalidraw/values.yaml \
+            --wait --timeout 5m

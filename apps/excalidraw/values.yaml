@@ -2,26 +2,38 @@ app-template:
   controllers:
     main:
       containers:
+        backend:
+          image:
+            repository: docker.io/zimengxiong/excalidash-backend
+            tag: latest
+          envFrom:
+            - secretRef:
+                name: excalidash-config
+          ports:
+            - containerPort: 8000
+              protocol: TCP
         main:
           image:
-            repository: docker.io/excalidraw/excalidraw
+            repository: docker.io/zimengxiong/excalidash-frontend
             tag: latest
+          env:
+            BACKEND_URL: http://localhost:8000
+
   service:
     main:
       ports:
         http:
           port: 80
           protocol: HTTP
+
   ingress:
     main:
       enabled: true
-      className: nginx
+      className: traefik
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
-        external-dns.alpha.kubernetes.io/target: homelab-tunnel.khuedoan.com
-        external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
       hosts:
-        - host: &host draw.khuedoan.com
+        - host: &host draw.lab.tanku.eu
           paths:
             - path: /
               pathType: Prefix
@@ -29,6 +41,15 @@ app-template:
                 name: main
                 port: http
       tls:
-        - hosts:
+        - secretName: excalidraw-tls
+          hosts:
             - *host
-          secretName: excalidraw-tls-certificate
+
+  persistence:
+    data:
+      accessMode: ReadWriteOnce
+      size: 1Gi
+      advancedMounts:
+        main:
+          backend:
+            - path: /app/prisma

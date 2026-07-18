@@ -63,7 +63,7 @@ print(b.status if b else 'not_found')
           AUTHENTIK_TOKEN=$(kubectl get secret authentik-credentials -n authentik \
             -o jsonpath='{.data.bootstrap-token}' | base64 -d)
 
-          for app in nextcloud paperless immich matrix; do
+          for app in nextcloud paperless immich matrix excalidash; do
             SECRET=$(kubectl exec -n authentik deployment/authentik-server -- \
               ak shell -c "
 from authentik.providers.oauth2.models import OAuth2Provider
