@@ -13,32 +13,151 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Clone ExcaliDash upstream
+      - name: Clone ExcaliDash upstream and apply patches
         run: |
           rm -rf /tmp/excalidash
           git clone https://github.com/ZimengXiong/ExcaliDash /tmp/excalidash
-
-      - name: Apply patches
-        run: |
           cd /tmp/excalidash
           git apply $GITHUB_WORKSPACE/apps/excalidraw/patch/backend.patch
           git apply $GITHUB_WORKSPACE/apps/excalidraw/patch/frontend.patch
 
-      - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Build and push backend image
+      - name: Create ghcr.io pull secret for Kaniko
         run: |
-          docker build \
-            -f /tmp/excalidash/backend/Dockerfile \
-            -t ghcr.io/janikvhrubant/excalidash-backend:latest \
-            /tmp/excalidash/backend
-          docker push ghcr.io/janikvhrubant/excalidash-backend:latest
+          kubectl create secret docker-registry kaniko-ghcr-secret \
+            --docker-server=ghcr.io \
+            --docker-username=janikvhrubant \
+            --docker-password="${{ secrets.GHCR_PAT }}" \
+            --namespace=default \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Build and push frontend image
+      - name: Build backend image via Kaniko
         run: |
-          docker build \
-            -f /tmp/excalidash/frontend/Dockerfile \
-            -t ghcr.io/janikvhrubant/excalidash-frontend:latest \
-            /tmp/excalidash
-          docker push ghcr.io/janikvhrubant/excalidash-frontend:latest
+          # Create PVC for build context
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: kaniko-backend-ctx
+            namespace: default
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources:
+              requests:
+                storage: 1Gi
+          EOF
+
+          # Copy source into PVC via a helper pod
+          kubectl delete pod kaniko-ctx-helper --ignore-not-found -n default
+          kubectl run kaniko-ctx-helper \
+            --image=busybox \
+            --restart=Never \
+            --overrides='{"spec":{"volumes":[{"name":"ctx","persistentVolumeClaim":{"claimName":"kaniko-backend-ctx"}}],"containers":[{"name":"kaniko-ctx-helper","image":"busybox","command":["sleep","3600"],"volumeMounts":[{"name":"ctx","mountPath":"/ctx"}]}]}}' \
+            -n default
+          kubectl wait pod/kaniko-ctx-helper --for=condition=Ready --timeout=60s -n default
+          tar czf /tmp/backend-ctx.tar.gz -C /tmp/excalidash/backend .
+          kubectl cp /tmp/backend-ctx.tar.gz default/kaniko-ctx-helper:/ctx/context.tar.gz
+          kubectl delete pod kaniko-ctx-helper -n default
+
+          # Run Kaniko build
+          kubectl delete pod kaniko-backend --ignore-not-found -n default
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: kaniko-backend
+            namespace: default
+          spec:
+            restartPolicy: Never
+            volumes:
+              - name: ctx
+                persistentVolumeClaim:
+                  claimName: kaniko-backend-ctx
+              - name: docker-config
+                secret:
+                  secretName: kaniko-ghcr-secret
+                  items:
+                    - key: .dockerconfigjson
+                      path: config.json
+            containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                  - --context=tar:///ctx/context.tar.gz
+                  - --destination=ghcr.io/janikvhrubant/excalidash-backend:latest
+                  - --verbosity=warn
+                volumeMounts:
+                  - name: ctx
+                    mountPath: /ctx
+                  - name: docker-config
+                    mountPath: /kaniko/.docker
+          EOF
+          kubectl wait pod/kaniko-backend --for=condition=Ready --timeout=60s -n default || true
+          kubectl logs -f kaniko-backend -n default
+          kubectl wait pod/kaniko-backend --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s -n default
+          kubectl delete pod kaniko-backend -n default
+          kubectl delete pvc kaniko-backend-ctx -n default
+
+      - name: Build frontend image via Kaniko
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: kaniko-frontend-ctx
+            namespace: default
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources:
+              requests:
+                storage: 1Gi
+          EOF
+
+          kubectl delete pod kaniko-ctx-helper --ignore-not-found -n default
+          kubectl run kaniko-ctx-helper \
+            --image=busybox \
+            --restart=Never \
+            --overrides='{"spec":{"volumes":[{"name":"ctx","persistentVolumeClaim":{"claimName":"kaniko-frontend-ctx"}}],"containers":[{"name":"kaniko-ctx-helper","image":"busybox","command":["sleep","3600"],"volumeMounts":[{"name":"ctx","mountPath":"/ctx"}]}]}}' \
+            -n default
+          kubectl wait pod/kaniko-ctx-helper --for=condition=Ready --timeout=60s -n default
+          tar czf /tmp/frontend-ctx.tar.gz -C /tmp/excalidash .
+          kubectl cp /tmp/frontend-ctx.tar.gz default/kaniko-ctx-helper:/ctx/context.tar.gz
+          kubectl delete pod kaniko-ctx-helper -n default
+
+          kubectl delete pod kaniko-frontend --ignore-not-found -n default
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: kaniko-frontend
+            namespace: default
+          spec:
+            restartPolicy: Never
+            volumes:
+              - name: ctx
+                persistentVolumeClaim:
+                  claimName: kaniko-frontend-ctx
+              - name: docker-config
+                secret:
+                  secretName: kaniko-ghcr-secret
+                  items:
+                    - key: .dockerconfigjson
+                      path: config.json
+            containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                  - --context=tar:///ctx/context.tar.gz
+                  - --dockerfile=frontend/Dockerfile
+                  - --destination=ghcr.io/janikvhrubant/excalidash-frontend:latest
+                  - --verbosity=warn
+                volumeMounts:
+                  - name: ctx
+                    mountPath: /ctx
+                  - name: docker-config
+                    mountPath: /kaniko/.docker
+          EOF
+          kubectl wait pod/kaniko-frontend --for=condition=Ready --timeout=60s -n default || true
+          kubectl logs -f kaniko-frontend -n default
+          kubectl wait pod/kaniko-frontend --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s -n default
+          kubectl delete pod kaniko-frontend -n default
+          kubectl delete pvc kaniko-frontend-ctx -n default
