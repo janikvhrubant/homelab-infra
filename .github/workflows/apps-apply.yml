@@ -103,7 +103,7 @@ jobs:
           kubectl rollout status deployment/nextcloud -n nextcloud --timeout=120s
 
           # Configure OIDC via user_oidc app (idempotent)
-          NEXTCLOUD_CLIENT_SECRET=$(kubectl get secret kanidm-nextcloud-oidc \
+          NEXTCLOUD_CLIENT_SECRET=$(kubectl get secret authentik-nextcloud-oidc \
             -n nextcloud -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
 
           if [ -n "${NEXTCLOUD_CLIENT_SECRET}" ]; then
@@ -213,13 +213,13 @@ jobs:
             kubectl exec -n postgres postgres-0 -- psql -U postgres \
               -c "CREATE DATABASE paperless OWNER paperless;"
 
-          # Get Kanidm secret for paperless OIDC and store as env secret
-          PAPERLESS_KANIDM_SECRET=$(kubectl get secret kanidm-paperless-oidc \
+          # Get Authentik secret for paperless OIDC and store as env secret
+          PAPERLESS_SECRET=$(kubectl get secret authentik-paperless-oidc \
             -n paperless -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
-          if [ -n "${PAPERLESS_KANIDM_SECRET}" ]; then
+          if [ -n "${PAPERLESS_SECRET}" ]; then
             kubectl create secret generic paperless-oidc-config \
               --namespace paperless \
-              --from-literal=PAPERLESS_SOCIALACCOUNT_PROVIDERS="{\"openid_connect\":{\"APPS\":[{\"provider_id\":\"kanidm\",\"name\":\"Authentik\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_KANIDM_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/application/o/paperless/.well-known/openid-configuration\"}}],\"OAUTH_PKCE_ENABLED\":true}}" \
+              --from-literal=PAPERLESS_SOCIALACCOUNT_PROVIDERS="{\"openid_connect\":{\"OAUTH_PKCE_ENABLED\":true,\"APPS\":[{\"provider_id\":\"authentik\",\"name\":\"authentik\",\"client_id\":\"paperless\",\"secret\":\"${PAPERLESS_SECRET}\",\"settings\":{\"server_url\":\"https://auth.lab.tanku.eu/application/o/paperless/.well-known/openid-configuration\",\"fetch_userinfo\":true}}],\"SCOPE\":[\"openid\",\"profile\",\"email\"]}}" \
               --dry-run=client -o yaml | kubectl apply -f -
           fi
 
@@ -278,7 +278,7 @@ jobs:
           ]" 2>/dev/null || true
 
           # Configure Immich OAuth via API
-          IMMICH_CLIENT_SECRET=$(kubectl get secret kanidm-immich-oidc \
+          IMMICH_CLIENT_SECRET=$(kubectl get secret authentik-immich-oidc \
             -n immich -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
           if [ -n "${IMMICH_CLIENT_SECRET}" ]; then
             # Wait for Immich server to be ready

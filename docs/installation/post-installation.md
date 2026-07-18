@@ -18,9 +18,10 @@ Save the following files to a safe location like a password manager (if you're u
 - Gitea:
     - Username: `gitea_admin`
     - Password: get from `global-secrets` namespace
-- Kanidm:
-    - Usernames: `admin` and `idm_admin`
-    - Password: run `./scripts/kanidm-reset-password admin` and `./scripts/kanidm-reset-password idm_admin`
+- Authentik:
+    - URL: `https://auth.lab.tanku.eu`
+    - Username: `akadmin`
+    - Password: set via `bootstrap-password` in `authentik-credentials` secret
 - Jellyfin and other applications in the \*arr stack: see the [dedicated guide for media management](../how-to-guides/media-management.md)
 - Other apps:
     - Username: `admin`

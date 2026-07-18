@@ -171,9 +171,9 @@ They can't capture all the project's features, but they are sufficient to get a 
         <td>Lightweight distribution of Kubernetes</td>
     </tr>
     <tr>
-        <td><img width="32" src="https://kanidm.com/images/logo.svg"></td>
-        <td><a href="https://kanidm.com">Kanidm</a></td>
-        <td>Modern and simple identity management platform</td>
+        <td><img width="32" src="https://avatars.githubusercontent.com/u/79537064"></td>
+        <td><a href="https://goauthentik.io">Authentik</a></td>
+        <td>Identity Provider and SSO platform</td>
     </tr>
     <tr>
         <td><img width="32" src="https://avatars.githubusercontent.com/u/13629408"></td>

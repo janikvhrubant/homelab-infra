@@ -74,7 +74,7 @@ print(p.client_secret if p else '')
             if [ -n "${SECRET}" ] && [ "${SECRET}" != "None" ]; then
               echo "Storing secret for ${app}"
               kubectl create namespace ${app} 2>/dev/null || true
-              kubectl create secret generic kanidm-${app}-oidc \
+              kubectl create secret generic authentik-${app}-oidc \
                 --namespace ${app} \
                 --from-literal=client-secret="${SECRET}" \
                 --dry-run=client -o yaml | kubectl apply -f -
