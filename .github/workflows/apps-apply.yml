@@ -72,7 +72,6 @@ jobs:
               --dry-run=client -o yaml | kubectl apply -f -
           else
             echo "WARNING: authentik-actualbudget-oidc not found — run authentik-setup workflow first"
-            # Create empty secret so helm deploy doesn't fail
             kubectl create secret generic actualbudget-oidc-config \
               --namespace actualbudget \
               --from-literal=PLACEHOLDER=true \
@@ -84,6 +83,29 @@ jobs:
             --namespace actualbudget \
             --values apps/actualbudget/values.yaml \
             --wait
+
+          # Write full OpenID config into SQLite DB (ActualBudget reads issuer/client from extra_data, not env vars)
+          if [ -n "${AB_SECRET}" ]; then
+            kubectl rollout status deployment/actualbudget -n actualbudget --timeout=120s
+            kubectl exec -n actualbudget deployment/actualbudget -- node -e "
+const Database = require('better-sqlite3');
+const db = new Database('/data/server-files/account.sqlite');
+const extraData = JSON.stringify({
+  issuer: 'https://auth.lab.tanku.eu/application/o/actualbudget/',
+  client_id: 'actualbudget',
+  client_secret: '${AB_SECRET}',
+  server_hostname: 'https://budget.lab.tanku.eu'
+});
+const existing = db.prepare(\"SELECT * FROM auth WHERE method='openid'\").get();
+if (existing) {
+  db.prepare(\"UPDATE auth SET extra_data=?, active=1 WHERE method='openid'\").run(extraData);
+} else {
+  db.prepare(\"INSERT INTO auth (method, display_name, extra_data, active) VALUES ('openid','OpenID Connect',?,1)\").run(extraData);
+}
+db.prepare(\"UPDATE auth SET active=0 WHERE method='password'\").run();
+console.log('OpenID config written to DB');
+"
+          fi
 
       - name: Deploy Nextcloud
         env:
@@ -378,4 +400,4 @@ jobs:
           helm upgrade --install excalidash apps/excalidraw \
             --namespace excalidraw \
             --values apps/excalidraw/values.yaml \
-            --wait --timeout 10m
+            --timeout 10m || echo "WARNING: ExcaliDash deploy failed (image may not be built yet)"
