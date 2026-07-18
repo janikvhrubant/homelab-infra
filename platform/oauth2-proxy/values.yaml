@@ -20,7 +20,6 @@ app-template:
                 secretKeyRef:
                   name: oauth2-proxy-credentials
                   key: cookie-secret
-            AUTH_HOST: "oauth2-proxy.lab.tanku.eu"
             COOKIE_DOMAIN: ".lab.tanku.eu"
             SCOPE: "openid profile email groups"
             INSECURE_COOKIE: "false"
