@@ -56,6 +56,35 @@ jobs:
             --values apps/vaultwarden/values.yaml \
             --wait
 
+      - name: Deploy ActualBudget
+        run: |
+          kubectl create namespace actualbudget 2>/dev/null || true
+
+          # Build OIDC config secret from Authentik client secret
+          AB_SECRET=$(kubectl get secret authentik-actualbudget-oidc \
+            -n actualbudget -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
+          if [ -n "${AB_SECRET}" ]; then
+            kubectl create secret generic actualbudget-oidc-config \
+              --namespace actualbudget \
+              --from-literal=ACTUAL_OPENID_DISCOVERY_URL="https://auth.lab.tanku.eu/application/o/actualbudget/" \
+              --from-literal=ACTUAL_OPENID_CLIENT_ID="actualbudget" \
+              --from-literal=ACTUAL_OPENID_CLIENT_SECRET="${AB_SECRET}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          else
+            echo "WARNING: authentik-actualbudget-oidc not found — run authentik-setup workflow first"
+            # Create empty secret so helm deploy doesn't fail
+            kubectl create secret generic actualbudget-oidc-config \
+              --namespace actualbudget \
+              --from-literal=PLACEHOLDER=true \
+              --dry-run=client -o yaml | kubectl apply -f -
+          fi
+
+          helm dependency update apps/actualbudget
+          helm upgrade --install actualbudget apps/actualbudget \
+            --namespace actualbudget \
+            --values apps/actualbudget/values.yaml \
+            --wait
+
       - name: Deploy Nextcloud
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -342,6 +371,7 @@ jobs:
             --from-literal=CSRF_SECRET="${CSRF_SECRET}" \
             --from-literal=API_KEY_HASH_PEPPER="${PEPPER}" \
             --from-literal=UPDATE_CHECK_OUTBOUND=false \
+            --from-literal=DATABASE_URL=file:/app/prisma/dev.db \
             --dry-run=client -o yaml | kubectl apply -f -
 
           helm dependency update apps/excalidraw

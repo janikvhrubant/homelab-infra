@@ -17,7 +17,7 @@ app-template:
             repository: docker.io/zimengxiong/excalidash-frontend
             tag: latest
           env:
-            BACKEND_URL: http://localhost:8000
+            BACKEND_URL: localhost:8000
 
   service:
     main:
