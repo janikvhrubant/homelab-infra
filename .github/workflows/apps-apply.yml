@@ -128,6 +128,10 @@ jobs:
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:app:set user_oidc allow_multiple_user_backends --value="0"
 
+            # Auto-redirect to Authentik when not logged in
+            kubectl exec -n nextcloud deployment/nextcloud -- \
+              php /var/www/html/occ config:app:set user_oidc auto_redirect_on_public_access --value="1"
+
             # Map app_admins group to Nextcloud admin
             kubectl exec -n nextcloud deployment/nextcloud -- \
               php /var/www/html/occ config:app:set user_oidc admin_groups \
