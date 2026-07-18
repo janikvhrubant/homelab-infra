@@ -24,7 +24,7 @@ app-template:
             SCOPE: "openid profile email groups"
             INSECURE_COOKIE: "false"
             LOGOUT_REDIRECT: "https://auth.lab.tanku.eu/ui/logout"
-            LIFETIME: "3600"
+            LIFETIME: "60"
       pod:
         hostAliases:
           - ip: "10.97.114.105"
