@@ -36,14 +36,14 @@ authentik:
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
-        - host: &host auth.lab.tanku.eu
-          paths:
-            - path: /
-              pathType: Prefix
+        - auth.lab.tanku.eu
+      paths:
+        - /
+      pathType: Prefix
       tls:
         - secretName: authentik-tls
           hosts:
-            - *host
+            - auth.lab.tanku.eu
 
   worker:
     replicas: 1
